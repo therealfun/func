@@ -1,0 +1,163 @@
+=pod
+
+=head1 NAME
+
+func - run commands in a temporary container
+
+=head1 SYNOPSIS
+
+func command...
+
+=head1 DESCRIPTION
+
+B<func> is a chroot(1) command replacement, used by a non-root user to build ports in a temporary filesystem container, created on the fly from a root template (either the real root (F</>) or a previously created root directory).
+
+The func-create(8), func-configure(8) and func-upgrade(8) scripts can be used to prepare such a root directory. These are the only commands needed to be run as root.
+
+unionfs(8), an union filesystem based on fuse(8), is used to make a union from a read-only directory (lower layer) and read/write directory (upper layer).
+
+Two methods are used to run commands in container:
+
+=over 4
+
+=item namespaces(7)
+
+This method needs kernel support: mount_namespaces(7) for C<mount --bind> and user_namespaces(7) for chroot(1). This method is 2-3 times faster than the next method, but still 2 times slower than running on the real system. These numbers might be the worst scenario, because the builds were measured on a system with slow a disk, without compilation (100% ccache hits), and without using C<-jN> in B<MAKEOPTS>. The footprint won't match when building packages that set specific group names (like dbus).
+
+=item B<proot>
+
+B<PRoot> (a user-space implementation of chroot, mount --bind, and binfmt_misc) uses ptrace to contain the program. It should work almost everywhere. This method can be forced by setting B<FUNC_PROOT> variable. Because C<proot> can't enforce read-only mounts in the container, B<FUNC_BIND_RO> is ignored.
+
+=back
+
+=head1 EXAMPLES
+
+Get a shell in container, with the current directory mounted as I</home/u/$cwd>:
+
+	func bash
+
+Get a shell in a volatile root (F</>), useful when building the kernel:
+
+	FUNC_ROOT=/ func bash
+
+Same, but keep the changes into /tmp/xxx, to reuse the session:
+
+	FUNC_ROOT=/ FUNC_COW=/tmp/xxx func bash
+
+Build the port from the current directory:
+
+	func pkgmk -d
+
+Build the port from the current directory, with all its dependencies, even if not listed in F</etc/prt-get.conf>:
+
+	func prt-get depinst $(basename $PWD)
+
+Building dbus without footprint mismatch and keep the package:
+
+	cd /usr/ports/opt/dbus
+	FUNC_PROOT=1 FUNC_ROOT=/ FUNC_BIND=/var/cache/pkg func fakeroot pkgmk
+
+Testing a port and keep the resulting packages:
+
+	export FUNC_BIND="/var/cache/src /var/cache/pkg"
+	export FUNC_COW=$HOME/tmp/port
+	cd port
+	func bash <<EOF
+		prt-get depinst port
+		pkgmk --update-footprint
+		pkgmk --update-md5sum
+		revdep port
+		prtverify .
+		finddeps port
+		findredundantdeps port
+	EOF
+	mv -v $FUNC_COW/var/cache/pkg/* /var/cache/pkg/
+	rm -rf $FUNC_COW
+
+See depinstc(1) for a more complex usage.
+
+=head1 NOTES
+
+Things done to accomodate building the ports in container:
+
+=over 4
+
+=item arguments
+
+To support C<func cmd>, C<func bash>, C<func bash -c ...> and C<func <<EOF...>, combined with FUNC_ROOT set to F</> or not, with B<proot> and namespaces(7), and with B<FUNC_DONT_EXPORT_CWD>, a complex form of voodoo is used, and can backfire with some forms of C<func bash -c...>.
+
+=item the current directory
+
+The current directory is considered a port, and it is mounted in container by default as F</home/u/$cwd> (unless B<FUNC_DONT_EXPORT_CWD> is set). The line C<prtdir /home/u> is inserted as the first line in F</etc/prt-get.conf>.
+
+=item fakeroot
+
+B<proot> and user_namespaces(7) can fake the root user (B<UID>/B<GID>), but B<fakeroot> is still needed in container, to handle the ownership changes, when builds are using commands like: C<chown daemon:nobody file>, or when B<sudo> is used in the config files.
+
+=item ports and F</etc/prt-get.conf>
+
+Unless using C<FUNC_ROOT=/>, the F</etc/ports> and F</usr/ports> are always mounted.
+
+The real F</etc/prt-get.conf> file is always copied, regardless B<FUNC_ROOT>.
+
+=item sudo
+
+The real F</etc/prt-get.conf>, most probably, has B<sudo> with a non-standard usage. The C<sudo> is replaced with C<fakeroot sudo> and a new /etc/sudoers is created in container, allowing all commands.
+
+=item variable environment
+
+Unless using C<FUNC_ROOT=/>, the environment is cleared (C<env --ignore-environment>), and only B<HOME> is set before entering in container. The commands are started with C<bash --login> to make sure F<$FUNC_ROOT/etc/profile> is used (where PATH, CCACHE_DIR and other variables are set).
+
+=back
+
+=head1 ENVIRONMENT
+
+=over 4
+
+=item FUNC_ROOT (default: F</var/cache/func-root>)
+
+The read-only root directory. Should be set to F</> when building packages against the main system.
+
+=item FUNC_UNION_ROOT (default: F</tmp/func.$pid>)
+
+The union directory, merging the read-only B<FUNC_ROOT> and read/write B<FUNC_COW>.
+
+=item FUNC_COW_BASE (default: F<$HOME/tmp>)
+
+The containers (B<FUNC_COW>) are created in this directory.
+
+=item FUNC_COW (default: F<$FUNC_COW_BASE/func.$pid.changes>)
+
+The upper layer, holding the new/modified files.
+
+If the default is used, the directory will be automatically cleared before and after the build commands.
+
+=item FUNC_DONT_EXPORT_CWD (not set by default)
+
+If this variable is set, B<func> won't export the current directory as F</home/u/$cwd> and won't add F</home/u> to F</etc/prt-get.conf>.
+
+=item FUNC_CHROOT_HOME (default: F</home/u>)
+
+The B<HOME> environment variable inside the chroot.
+
+This is used to make the build reproductible.
+
+=item FUNC_BIND
+
+List of space separated paths for extra bindings. Eg. C<$HOME/.ccache:/var/cache/ccache /var/cache/distfiles> will mount F<$HOME/.ccache> in I<$FUNC_UNION_ROOT/var/cache/ccache> and F</var/cache/distfiles> in I<$FUNC_UNION_ROOT/var/cache/distfiles>.
+
+=item FUNC_BIND_RO
+
+List of space separated paths (destinations paths from B<$FUNC_BIND>) which should be read-only. Ignored with B<proot> method.
+
+=back
+
+=head1 CAVEATS
+
+unionfs(8) is not tested upstream in these conditions (with cow and relaxed_permissions options): when a file has to be written (even when the non-root user doesn't have to rights to do it in the lower layer), a copy of that file is made in the read/write directory (the upper layer), and used from there. However, vanilla unionfs seems to be enough to build a lot of ports. A patch is needed to avoid a footprint mismatch on file rights when building python (and probably others).
+
+=head1 COPYRIGHT AND LICENSE
+
+Public domain
+
+=cut

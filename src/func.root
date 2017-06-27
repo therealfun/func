@@ -1,0 +1,18 @@
+#!/bin/bash
+
+C=/tmp/changes
+W=/tmp/workdir
+M=/tmp/merged
+
+for d in $C $W $M; do
+	[ -d $d ] || mkdir -p $d
+done
+
+mount -t overlay overlay -olowerdir=/,upperdir=$C,workdir=$W $M
+
+unshare --mount-proc --fork --pid <<EOF
+	mount --bind /var/cache/src $M/var/cache/src
+	chroot $M
+EOF
+
+umount $M

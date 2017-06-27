@@ -1,0 +1,66 @@
+=pod
+
+=head1 NAME
+
+func-configure - (re)configure CRUX chroot
+
+=head1 SYNOPSIS
+
+func-configure [dir]
+
+If B<dir> is missing, F</var/cache/func-root> will be used.
+
+=head1 DESCRIPTION
+
+B<func-configure> (re)configures a CRUX chroot, previously created with func-create(8).
+
+It configures the following items:
+
+=over 4
+
+=item F</etc/resolv.conf>
+
+Copy the current one.
+
+=item B<LANG>
+
+Generate the locales for B<en_US> and add B<LANG> to F</etc/profile> (if not already present).
+
+=item F</etc/pkgmk.conf>
+
+Set B<PKGMK_SOURCE_DIR> to F</var/cache/src>, B<PKGMK_PACKAGE_DIR> to F</var/cache/pkg> and B<PKGMK_WORK_DIR> to F</var/cache/work> if not already set.
+
+=item F</etc/ports/>
+
+Add the B<therealfun> repository, enable all the I<*.inactive> ports.
+
+=item F</usr/ports>
+
+Run C<ports -u>.
+
+=item B<runscripts>
+
+If this option is not set (in any way) in F</etc/prt-get.conf>, it will be set to C<runscripts no> (to indicate that it was configured) and it will run the B<post-install> scripts for all the installed packages (usually the ones from core).
+
+=item B<packages>
+
+Run:
+
+	prt-get update pkgutils --install-scripts
+	prt-get depinst fakeroot prt-utils ccache oprt ports-contrib --install-scripts
+
+It will update again all the ports, including the ones installed by B<ports-contrib>.
+
+It will configure and enable B<ccache> (if the CCACHE_DIR is not present in F</etc/profile>).
+
+=back
+
+=head1 SEE ALSO
+
+func-create(8), func-chroot(8), func-upgrade(8)
+
+=head1 COPYRIGHT AND LICENSE
+
+Public domain
+
+=cut

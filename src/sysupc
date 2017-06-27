@@ -1,0 +1,94 @@
+#!/bin/bash
+
+main() {
+	setup_variables
+
+	if [[ ${SYSUPC_USE_PRT_GET+defined} ]]; then
+		system_upgrade_with_prt_get
+	else
+		system_upgrade_with_oprt
+	fi
+}
+
+setup_variables() {
+	local _DIRS=($(
+		. /etc/pkgmk.conf
+		echo $PKGMK_PACKAGE_DIR
+		echo $PKGMK_SOURCE_DIR
+	))
+
+	export FUNC_BIND+=" ${_DIRS[@]}"
+	export FUNC_DONT_EXPORT_CWD=1
+	export FUNC_ROOT=/
+
+	[[ ${REVDEP_OPTS+defined} ]] \
+		|| REVDEP_OPTS="-i libreoffice"
+	export REVDEP_OPTS="${REVDEP_OPTS//[^a-zA-Z0-9 -]/}"
+}
+
+system_upgrade_with_prt_get() {
+	func bash <(
+		declare -f                    \
+			ccache_reset_stats    \
+			ccache_show_stats     \
+			is_ccache_enabled     \
+			upgrade_with_prt_get
+
+		echo   "upgrade_with_prt_get"
+	)
+}
+
+system_upgrade_with_oprt() {
+	# we need fakeroot because of ports like dcron, dbus
+	export OPRT_BUILD_WITH_FAKEROOT=1
+	export OPRT_INSTALL_WITH_FORCE=1
+	export OPRT_SKIP_REJMERGE=1
+	export OPRT_REVDEP=$REVDEP_OPTS
+
+	func bash <(
+		declare -f                 \
+			ccache_reset_stats \
+			ccache_show_stats  \
+			is_ccache_enabled  \
+			upgrade_with_oprt
+
+		echo "upgrade_with_oprt"
+	)
+}
+
+ccache_reset_stats() {
+	is_ccache_enabled \
+		&& ccache --zero-stats
+}
+
+ccache_show_stats() {
+	is_ccache_enabled \
+		&& ccache --show-stats
+}
+
+is_ccache_enabled() {
+	[[ ${CCACHE_DIR+defined} && -x /usr/bin/ccache ]]
+}
+
+upgrade_with_oprt() {
+	# do not run install scripts in container
+	echo > ${HOME}/.cache/oprt/run_script
+
+	ccache_reset_stats
+	( set -o xtrace; oprt-update ) || exit 1
+	ccache_show_stats
+}
+
+upgrade_with_prt_get() {
+	# do not run install scripts in container
+	sed 's/runscripts.*//' --in-place /etc/prt-get.conf
+
+	ccache_reset_stats
+	( set -o xtrace; prt-get sysup ) || exit 1
+	ccache_show_stats
+
+	set -o xtrace
+	revdep $REVDEP_OPTS | xargs --no-run-if-empty prt-get update -fr
+}
+
+main

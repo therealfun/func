@@ -1,0 +1,39 @@
+=pod
+
+=head1 NAME
+
+func-chroot - chroot helper for func scripts
+
+=head1 SYNOPSIS
+
+func-chroot
+
+=head1 DESCRIPTION
+
+B<func-chroot> mounts F<dev>, F<tmp>, F<proc> and F<sys> and run C<chroot bash> in F<FUNC_ROOT>.
+
+=head1 ENVIRONMENT
+
+=over 4
+
+=item B<FUNC_ROOT>
+
+The chroot dir, F</var/cache/func-root>.
+
+=back
+
+=head1 EXAMPLES
+
+func-chroot bash --login
+
+echo ls | func-chroot
+
+=head1 SEE ALSO
+
+func-create(8), func-configure(8), func-upgrade(8)
+
+=head1 COPYRIGHT AND LICENSE
+
+Public domain
+
+=cut

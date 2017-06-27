@@ -1,0 +1,74 @@
+=pod
+
+=head1 NAME
+
+sysupc - rebuild the packages that need to be upgraded, in a temporary container
+
+=head1 SYNOPSIS
+
+sysupc
+
+=head1 DESCRIPTION
+
+B<sysupc> runs the following commands in a temporary container, using the real  root I</> as a read-only layer:
+
+	oprt-update
+
+or (if B<SYSUPC_USE_PRT_GET> is set):
+
+	prt-get sysup
+	revdep | xargs --no-run-if-empty prt-get update -fr
+
+When finished, you'll have the updated sources in B<$PKGMK_SOURCE_DIR> and the newly built packages in B<$PKGMK_PACKAGE_DIR>.
+
+It only makes sense if B<pkgmk> is configured with shared directories.
+
+=head1 EXAMPLES
+
+Build in container and upgrade your system (notice the missing I<-fr>).
+
+	sysupc
+	prt-get sysup
+	revdep | xargs --no-run-if-empty prt-get update
+
+Test the system upgrade, without touching the current source or package directories:
+
+	. /etc/pkgmk.conf
+	export FUNC_BIND_RO="$PKGMK_SOURCE_DIR $PKGMK_PACKAGE_DIR"
+	sysupc
+
+Workaround footprint mismatches (with packages like dcron, dbus):
+
+	FUNC_PROOT=1 sysupc
+
+Use automatic builds:
+
+	sudo crontab - <(sudo crontab -l; echo "0 23 * * * ports -u")
+
+	crontab - <(crontab -l; echo "0 0 * * * sysupc || FUNC_PROOT=1 sysupc")
+
+In the morning, with the coffee next to the keyboard, read the emails sent by cron, execute C<prt-get diff> and pick your ports. Or go wild with C<prt-get sysup>.
+
+=head1 ENVIRONMENT
+
+=over 4
+
+=item B<REVDEP_OPTS> (default: C<-i libreoffice>)
+
+The options used with the B<revdep> command.
+
+=item B<SYSUPC_USE_PRT_GET> (default: not set)
+
+If set, it will use B<prt-get> instead of B<oprt>.
+
+=back
+
+=head1 SEE ALSO
+
+func(1), revdep(1), oprt(1), prt-get(8)
+
+=head1 COPYRIGHT AND LICENSE
+
+Public domain
+
+=cut

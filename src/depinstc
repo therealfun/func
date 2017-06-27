@@ -1,0 +1,469 @@
+#!/bin/bash
+
+main() {
+	setup_variables
+	add_generic_mount_points
+	fill_ARGS "$@"
+
+	# Because recursive_install runs in a sub-shell,
+	# all these variables will be "new" for every _PORT_ARG
+	declare -A _PORTS_SEEN
+ 	_PKG_NO=0
+	for _PORT_ARG in "${_ARGS[@]}"; do
+		(
+			recursive_install "$_PORT_ARG"
+		) || {
+			echo "ERROR: port failed: $_PORT_ARG" >&2
+			exit 1
+		}
+	done
+}
+
+setup_variables() {
+	[[ -d $FUNC_COW_BASE ]] || FUNC_COW_BASE=$HOME/tmp
+	[[ -d $FUNC_ROOT     ]] || FUNC_ROOT=/var/cache/func-root
+	[[ -d $SHARED_PKG    ]] || {
+		SHARED_PKG="$FUNC_COW_BASE/shared_pkg"
+		[[ -d $SHARED_PKG ]] \
+			|| mkdir --parents "$SHARED_PKG"
+	}
+
+	export FUNC_BIND FUNC_BIND_RO FUNC_COW_BASE FUNC_COW FUNC_ROOT
+
+	local _DIRS=($(
+		. /etc/pkgmk.conf
+		echo $PKGMK_SOURCE_DIR
+		echo $PKGMK_PACKAGE_DIR
+		echo $PKGMK_WORK_DIR
+	))
+
+	PKGMK_SOURCE_DIR=${_DIRS[0]%%/}
+	PKGMK_PACKAGE_DIR=${_DIRS[1]%%/}
+	PKGMK_WORK_DIR=${_DIRS[2]%%/}
+}
+
+add_generic_mount_points() {
+	[[ -d $SHARED_SRC && $FUNC_ROOT != / ]] \
+		|| SHARED_SRC=$PKGMK_SOURCE_DIR
+
+	FUNC_BIND+=" $SHARED_SRC:$PKGMK_SOURCE_DIR $PKGMK_WORK_DIR"
+
+	[[ -d "$HOME/.cache/pp" ]] && {
+		if [[ $FUNC_ROOT == / ]]; then
+			FUNC_BIND+="    $HOME/.cache/pp"
+			FUNC_BIND_RO+=" $HOME/.cache/pp"
+		else
+			FUNC_BIND+="    $HOME/.cache/pp:/home/u/.cache/pp"
+			FUNC_BIND_RO+="                 /home/u/.cache/pp"
+
+			# keep $HOME to avoid findredundantdeps errors
+			# without removing the directory from prt-get.conf
+			FUNC_BIND+="    $HOME/.cache/pp"
+			FUNC_BIND_RO+=" $HOME/.cache/pp"
+		fi
+	}
+
+	[[ ${CCACHE_DIR+defined} ]]                     \
+		&& [[ $FUNC_ROOT != / ]]                \
+		&& [[ -x "$FUNC_ROOT/usr/bin/ccache" ]] \
+		&& FUNC_BIND+=" $CCACHE_DIR:/var/cache/ccache"
+}
+
+fill_ARGS() {
+	local _A
+
+	for _A in ${@:-$PWD}; do
+		[[ -e "$_A" ]] || {
+			_A="$(get_port_dir "${_A##*/}")"
+			[[ -e "$_A" ]] || {
+				echo "ERROR: Can't find port: $_A" >&2
+				exit 1
+			}
+		}
+			
+		_ARGS+=( $(readlink -f "$_A") )
+	done
+}
+
+get_port_dir() {
+	local     _NAME=$1
+	local _PORT_DIR
+
+	if [[ ${DEPINSTC_USE_PRT_GET+defined} ]]; then
+		_PORT_DIR="$(prt-get path "$_NAME")"
+	else
+		local _COLS=( $(oprt-collections "$_NAME") )
+		_PORT_DIR="${_COLS[0]}/$_NAME"
+	fi
+
+	printf '%s\n' "$(readlink -f "$_PORT_DIR")"
+}
+
+recursive_install() {
+	local _PORT_DIR=$1
+
+	local _CONTINUE=0
+	local     _STOP=1
+
+	already_seen "${_PORT_DIR##*/}" \
+		&& return $_CONTINUE
+
+	local _NEXT _NEXT_DIR _DEPS=( $(pkgfile_deps "$_PORT_DIR") )
+
+	for _NEXT in "${_DEPS[@]}"; do
+		_NEXT_DIR="$(get_port_dir "$_NEXT")"
+
+		recursive_install "$_NEXT_DIR" \
+			|| return $_STOP
+	done
+
+	install_port "$_PORT_DIR"
+}
+
+already_seen() {
+	local     _PORT=$1
+
+	local     _SEEN=0
+	local _NOT_SEEN=1
+
+	[[ ${_PORTS_SEEN["$_PORT"]+defined} ]] \
+		&& return $_SEEN
+
+	_PORTS_SEEN["$_PORT"]=1
+
+	return $_NOT_SEEN
+}
+
+pkgfile_deps() {
+	local _PORT_DIR=$1
+
+	[[ -x "$(which oprt-pkgfile-deps)" ]] && {
+		oprt-pkgfile-deps "$_PORT_DIR"
+		return
+	}
+
+	awk '(NF > 1) { print $2 }' FS="Depends on:" < "$_PORT_DIR/Pkgfile" \
+		| sed -e 's/,/ /g' -e 's/  / /g'
+}
+
+install_port() {
+	local _PORT_DIR=$1
+	local     _PORT=${_PORT_DIR##*/}
+
+	local _CONTINUE=0
+	local     _STOP=1
+
+	_PKG_NO=$(( $_PKG_NO + 1 ))
+
+	printf '======= %s (%s) [%d] @ %(%F %T)T\n' "$_PORT_DIR" "${_PORT_ARG##*/}" "$_PKG_NO" -1
+
+	cd -- "$_PORT_DIR" \
+		|| return $_STOP
+
+	setup_container "$_PORT_DIR"
+
+	is_port_up_to_date && {
+		rm --recursive --force "$FUNC_COW"
+		return $_CONTINUE
+	}
+
+	# Signing inside the container won't work when we use namespaces
+	# and the (faked) root doesn't have access to the SEC_KEY
+	# Eg. on a mounted fuse directory, like encfs.
+	# Also, the signature file has to be created before the build
+	# to avoid the creation of .md5sum (when it not supported for this repo)
+
+	[[ -e "$FUNC_COW/is_our_arg" ]] \
+		&& make_port_signature
+
+	install_port_in_container "$_PORT_DIR" || {
+		export FUNC_PROOT=1
+		install_port_in_container "$_PORT_DIR"
+	} || { 
+		show_oprt_build_log
+		return $_STOP
+	}
+
+	[[ -e "$FUNC_COW/is_our_arg" ]] && {
+		check_port "$_PORT" \
+			|| return $_STOP
+	}
+
+	make_pkg_signature
+
+	rm --recursive --force "$FUNC_COW"
+
+	return $_CONTINUE
+}
+
+setup_container() {
+	local _PORT_DIR=$1
+	local     _PORT=${_PORT_DIR##*/}
+
+	setup_container_dir "$_PORT"
+
+	if [[ $FUNC_ROOT == / ]]; then
+		FUNC_BIND+=" $PKGMK_PACKAGE_DIR"
+		create_file_in_container "full_root"
+	else
+		FUNC_BIND+=" $SHARED_PKG:$PKGMK_PACKAGE_DIR"
+
+		# oprt specific
+		copy_file_in_container                          \
+			"$HOME/.cache/oprt/stats_collections"   \
+			"/home/u/.cache/oprt/stats_collections"
+		copy_file_in_container                          \
+			"$HOME/.cache/oprt/user_collections"    \
+			"/home/u/.cache/oprt/user_collections"
+	fi
+
+	is_our_arg "$_PORT_DIR" \
+		&& create_file_in_container "is_our_arg"
+
+	[[ ${CCACHE_DIR+defined} && -x "$FUNC_ROOT/usr/bin/ccache" ]] \
+		&& create_file_in_container "use_ccache"
+
+	[[ ${DEPINSTC_USE_PRT_GET+defined} ]] \
+		|| create_file_in_container "use_oprt"
+}
+
+setup_container_dir() {
+	local _PORT=$1
+
+	FUNC_COW="$FUNC_COW_BASE/depinstc.$_PORT"
+
+	[[ -d $FUNC_COW ]] \
+		&& rm --recursive --force "$FUNC_COW"
+
+	mkdir --parents "$FUNC_COW"
+}
+
+create_file_in_container() {
+	local _FILE=$1
+
+	touch "$FUNC_COW/$_FILE"
+}
+
+copy_file_in_container() {
+	local  _SRC=$1
+	local _DEST=$2
+
+	[[ -e "$_SRC" ]] || return
+
+	_DEST="$FUNC_COW/$_DEST"
+
+	local _DEST_DIR=${_DEST%/*}
+
+	mkdir --parents "$_DEST_DIR"
+
+	cp -- "$_SRC" "$_DEST"
+}
+
+is_our_arg() {
+	local _RE=" $1 "
+	[[ " ${_ARGS[@]} " =~ $_RE ]]
+}
+
+make_port_signature() {
+	[[ -e $SEC_KEY ]] || return
+
+	(
+		set -o xtrace
+		pkgmk --download --update-signature --secret-key "$SEC_KEY"
+	)
+	sed "s,${SEC_KEY/.sec/.pub},$PUB_KEY," --in-place .signature
+}
+
+make_pkg_signature() {
+	[[ -e $SEC_KEY ]] \
+		|| return
+
+	is_port_up_to_date \
+		|| return
+
+	local _TARGET=${BASH_REMATCH[1]##*/}
+	if [[ $FUNC_ROOT == / ]]; then
+		_TARGET="$PKGMK_PACKAGE_DIR/$_TARGET"
+	else
+		_TARGET="$SHARED_PKG/$_TARGET"
+	fi
+
+	sha256sum --tag "$_TARGET"                                      \
+		| sed 's|^SHA256 (.*/\(.*\))\(.* = .*\)|SHA256 (\1)\2|' \
+		| signify -S -e -x - -q -s "$SEC_KEY" -m -              \
+		> "$_TARGET.tmp"
+
+	(( $? == 0 )) && {
+		sed "s,${SEC_KEY/.sec/.pub},$PUB_KEY," --in-place "$_TARGET.tmp"
+		mv "$_TARGET.tmp" "${_TARGET%.*}.sig"
+	}
+}
+
+install_port_in_container() {
+	local _PORT_DIR=$1
+	local     _PORT=${_PORT_DIR##*/}
+
+	func bash <(
+		declare -f                                \
+			container_build_port              \
+			container_disable_install_scripts \
+			container_is_port_up_to_date      \
+			container_make_dependent_list     \
+			container_is_port_installed       \
+			container_select_build_CMD
+
+		printf 'container_build_port "%s" \n' "$_PORT"
+	)
+
+	(( $? == 0 )) || return $?
+
+	remove_dependent_packages "$_PORT"
+
+	return 0
+}
+
+container_build_port() {
+	local _PORT=$1
+
+	container_is_port_up_to_date \
+		&& touch /up-to-date
+
+	[[ -e /full_root ]] \
+		&& container_disable_install_scripts
+
+	[[ -e /up-to-date ]] \
+		|| container_make_dependent_list "$_PORT"
+
+	local _CMD
+	container_select_build_CMD "$_PORT"
+
+	[[ -e /use_ccache && ! -e /up-to-date ]] \
+		&& ccache --zero-stats
+
+	printf '%s\n' "$_CMD"
+
+	$_CMD \
+		|| exit 1
+
+	[[ -e /use_ccache && ! -e /up-to-date  ]] \
+		&& ccache --show-stats | grep "cache hit rate"
+
+	exit 0
+}
+
+container_disable_install_scripts() {
+	mkdir --parents "$HOME/.cache/oprt"
+	echo > ${HOME}/.cache/oprt/run_script
+	sed 's/runscripts.*//' --in-place /etc/prt-get.conf
+}
+
+container_is_port_up_to_date() {
+	local _MATCH="^=======> Package '(.*)' is up to date\.\$"
+
+	[[ "$(pkgmk --up-to-date)" =~ $_MATCH ]]
+}
+
+is_port_up_to_date() {
+	local _MATCH="^=======> Package '(.*)' is up to date\.\$"
+
+	[[ "$(func bash pkgmk --up-to-date)" =~ $_MATCH ]]
+}
+
+container_make_dependent_list() {
+	local _PORT=$1
+
+	printf 'REBUILD: %s - %s\n' "$_PORT" "${BASH_REMATCH[1]}"
+
+	if [[ -e /use_oprt ]]; then
+		export OPRT_DEPSEARCH_BASIC=1
+		oprt-depsearch "$_PORT" 2>/dev/null    \
+				| grep '^Name:'        \
+				| awk '{print $2}'     \
+				| sort -u
+	else
+		prt-get dependent --all "$_PORT"
+	fi >/rebuild_for_dependents
+}
+
+container_select_build_CMD() {
+	local _PORT=$1
+
+	if [[ -e /use_oprt ]]; then
+		export OPRT_BUILD_WITH_FAKEROOT=1
+		export OPRT_DONT_ASK_SCRIPT=1
+		_CMD=oprt-depinst
+		[[ -e /is_our_arg ]] && {
+			export OPRT_INSTALL_WITH_FORCE=1
+			export OPRT_INSTALL_IGNORING_FOOTPRINT=1
+		}
+		container_is_port_installed "$_PORT"        \
+			&& [[ -e /rebuild_for_dependents ]] \
+			&& _CMD=oprt-reinstall
+	else
+		_CMD="prt-get depinst $_PORT"
+		prt-get isinst "$_PORT" \
+			&& _CMD="prt-get update $_PORT"
+		[[ -e /is_our_arg ]] \
+			&& _CMD+=" -if -fi"
+	fi
+}
+
+container_is_port_installed() {
+	local _PORT=$1
+
+	pkginfo --installed | grep "^$_PORT " >/dev/null
+}
+
+remove_dependent_packages() {
+	local _PORT=$1
+
+	[[ -e "$FUNC_COW/rebuild_for_dependents" ]] || return
+
+	local _DEPENDENTS _PKG _PORT
+
+	readarray -t $_DEPENDENTS < "$FUNC_COW/rebuild_for_dependents"
+
+	for _DEP in "${_DEPENDENTS[@]}"; do
+		for _PKG in $SHARED_PKG/$_DEP\#*; do
+			[[ -e "$_PKG" ]] || continue
+
+			printf 'REMOVING %s because of %s\n' "$_PKG" "$_PORT"
+
+			rm -- "$_PKG"
+		done
+	done
+
+	return 0
+}
+
+show_oprt_build_log() {
+	[[ ${DEPINSTC_USE_PRT_GET+defined} ]] || return
+
+	local _FAILED=( $FUNC_COW/home/u/.cache/oprt/*.failed )
+	local _LOG=${_FAILED[0]}
+
+	[[ -e $_LOG ]] || return
+
+	echo '>>>'
+	echo '>>> the last 100 lines from the build log'
+	echo '>>>'
+	tail -n 100 "$_LOG"
+
+	printf 'Log: %s\n' "$_LOG"
+}
+
+check_port() {
+	local _PORT=$1
+
+	func bash <<-EOF
+	set -o errexit
+	set -o xtrace
+	pkgmk --update-footprint
+	revdep "$_PORT"
+	prtverify .
+	finddeps "$_PORT"
+	findredundantdeps "$_PORT" || true
+	EOF
+}
+
+main "$@"

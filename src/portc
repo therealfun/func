@@ -1,0 +1,35 @@
+#!/bin/bash
+
+[[ -d $FUNC_ROOT ]] || FUNC_ROOT=/var/cache/func-root
+
+readarray -t _LOCAL <(
+	. /etc/pkgmk.conf
+	echo $PKGMK_SOURCE_DIR
+	echo $PKGMK_PACKAGE_DIR
+	echo $PKGMK_WORK_DIR
+)
+_LOCAL+=( $CACHE_DIR )
+
+readarray -t _CHROOT <(
+	. $FUNC_ROOT/etc/pkgmk.conf
+	echo $PKGMK_SOURCE_DIR
+	echo $PKGMK_PACKAGE_DIR
+	echo $PKGMK_WORK_DIR
+	. $FUNC_ROOT/etc/profile
+	echo $CCACHE_DIR
+)
+
+for k in {0..3}; do
+	src=${_LOCAL[$k]%%/}
+	dest=${_CHROOT[$k]%%/}
+	FUNC_BIND+=" $src:$dest"
+done
+
+FUNC_BIND+=" $HOME/.cache/pp:/home/u/.cache/pp" # should be in func
+# keep $HOME to avoid findredundantdeps errors
+# without removing the directory from prt-get.conf
+FUNC_BIND+=" $HOME/.cache/pp"
+
+export FUNC_BIND
+
+func "$@"

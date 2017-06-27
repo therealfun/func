@@ -1,0 +1,22 @@
+#!/bin/bash
+
+export FUNC_ROOT=${1:-/var/cache/func-root}
+
+cmd=${BASH_SOURCE%/*}/func-chroot
+
+$cmd bash <<EOF
+	set -o errexit
+	ports --update
+	prt-get sysup --install-scripts
+	revdep | xargs --no-run-if-empty prt-get update -fr --install-scripts
+	. /etc/pkgmk.conf
+	test -z "$PKGMK_SOURCE_DIR"  || rm $PKGMK_SOURCE_DIR/*
+	test -z "$PKGMK_PACKAGE_DIR" || rm $PKGMK_PACKAGE_DIR/*
+	rm -r /root
+	mkdir /root
+EOF
+
+$cmd rejmerge
+
+echo "Building $FUNC_ROOT.tar.xz ..."
+bsdtar --strip-components 1 --create --file "$FUNC_ROOT.tar.xz" "$FUNC_ROOT"
