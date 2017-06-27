@@ -41,3 +41,5 @@ $(DEST_BIN) $(DEST_MAN1) $(DEST_MAN8): $(DEST_BASE) build
 
 $(DEST_BASE) build:
 	install -d $@
+
+$(SRC_MAN1) $(SRC_MAN8): build
