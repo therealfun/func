@@ -1,134 +1,28 @@
 #!/bin/bash
 
-(( $# > 0 )) || exit 1
+[[ $1 == "" ]] && exit 0
 
-[[ -d $FUNC_ROOT        ]] || FUNC_ROOT=/var/cache/func-root
-[[ -d $FUNC_UNION_ROOT  ]] || FUNC_UNION_ROOT=/tmp/func.$$
-[[ -d $FUNC_COW_BASE    ]] || FUNC_COW_BASE=$HOME/tmp
-auto_FUNC_COW="$FUNC_COW_BASE/func.$$.changes"
-[[ -d $FUNC_COW         ]] || FUNC_COW=$auto_FUNC_COW
-[[ -d $FUNC_CHROOT_HOME ]] || FUNC_CHROOT_HOME=/home/u
+# Use the tool from the current directory, then search the $PATH
+# It might make sense to reverse this order to allow customizations.
 
-[[ ${FUNC_PROOT+defined} ]]                                    \
-	|| [[ -e /proc/self/ns/mnt && -e /proc/self/ns/user ]] \
-	|| FUNC_PROOT=1
+tool=${BASH_SOURCE%/*}/func-$1
 
-mkdir --parents "$FUNC_UNION_ROOT" \
-	|| exit 1
+[[ -x $tool ]] || tool=$(which func-$1 2>/dev/null)
 
-[[ -d $FUNC_COW ]]                     \
-	|| mkdir --parents "$FUNC_COW" \
-	|| exit 1
+export                       \
+	FUNC_BIND            \
+	FUNC_BIND_RO         \
+	FUNC_COW             \
+	FUNC_COW_BASE        \
+	FUNC_DONT_BIND_CWD   \
+	FUNC_PROOT           \
+	FUNC_ROOT            \
+	FUNC_UNION_ROOT      \
 
-cleanup() {
-	local err=$?
-	fusermount -u "$FUNC_UNION_ROOT"
-	rmdir         "$FUNC_UNION_ROOT"
-	[[ $FUNC_COW == $auto_FUNC_COW ]] \
-		&& rm --recursive --force "$FUNC_COW"
-	exit $err
-}
+[[ $tool == "" ]] \
+	|| shift
 
-trap cleanup  EXIT
-trap "exit 1" INT HUP QUIT TERM
+[[ $return == "" ]] \
+	&& exec $tool "$@"
 
-unionfs -o cow,relaxed_permissions       \
-	"${FUNC_COW}=RW:${FUNC_ROOT}=RO" \
-	"$FUNC_UNION_ROOT"               \
-		|| exit 1
-
-opts=()
-priv_cmd=
-
-add_mount() {
-	local src=$1
-	local dest=${2:-$src}
-	if [[ ${FUNC_PROOT+defined} ]]; then
-		opts+=( "--bind=$src:$dest" )
-	else
-		dest="$FUNC_UNION_ROOT$dest"
-		if [[ -d $src ]]; then
-			mkdir --parents "$dest"
-		else # is file
-			mkdir --parents "${dest%/*}"
-		fi
-		priv_cmd+="mount --rbind '$src' '$dest'; "
-	fi
-}
-
-if [[ ${FUNC_DONT_EXPORT_CWD+defined} ]]; then
-	cwd=/
-else
-	cwd="$FUNC_CHROOT_HOME/${PWD##*/}"
-	add_mount "$PWD" "$cwd"
-fi
-
-if [[ ${FUNC_PROOT+defined} ]]; then
-	cmd="bash -c"
-	opts+=( "--root-id" "--cwd=$cwd" )
-
-	add_mount /dev
-	add_mount /sys
-	add_mount /proc
-	add_mount /tmp
-else
-	cmd="bash -c 'cd \"$cwd\"; $@'"
-
-	[[ -e /proc/self/ns/pid ]] \
-		&& opts+=( "--pid" )
-	[[ -e /proc/self/ns/uts ]] && {
-		opts+=( "--uts" )
-		priv_cmd+="hostname host; "
-	}
-	priv_cmd+="mount --rbind      /dev '$FUNC_UNION_ROOT/dev'; "
-	priv_cmd+="mount --types proc proc '$FUNC_UNION_ROOT/proc'; "
-fi
-
-[[ -d "$FUNC_COW/etc" ]] \
-	|| mkdir "$FUNC_COW/etc"
-
-# Setup contained /etc/prt-get.conf 
-cp /etc/prt-get.conf                    "$FUNC_COW/etc/prt-get.conf"
-sed "s/sudo/fakeroot sudo/g" --in-place "$FUNC_COW/etc/prt-get.conf"
-[[ ${FUNC_DONT_EXPORT_CWD+defined} ]]                   \
-	|| sed "1i prtdir $FUNC_CHROOT_HOME"            \
-		--in-place "$FUNC_COW/etc/prt-get.conf"
-
-# Setup contained sudoers file
-echo "ALL ALL=(ALL) ALL" > "$FUNC_COW/etc/sudoers"
-
-[[ $FUNC_ROOT == "/" ]] || {
-	add_mount /etc/ports
-	add_mount /usr/ports
-	FUNC_BIND_RO+=" /etc/ports /usr/ports"
-
-	# We want a clean environment with proper HOME set
-	prefix_cmd="env --ignore-environment HOME=${FUNC_CHROOT_HOME:-/}"
-
-	# We want to include the preconfigured environment from /etc/profile
-	prefix_cmd+=" bash --login"
-
-	cmd=${cmd/bash/$prefix_cmd}
-}
-
-# Use extra mount points
-read -r -a arr <<< "$FUNC_BIND"
-for spec in "${arr[@]}"; do
-	src=${spec%:*}
-	dest=${spec#*:}
-	add_mount "$src" "$dest"
-done
-
-# Remount read-only
-read -r -a arr <<< "$FUNC_BIND_RO"
-for dir in "${arr[@]}"; do
-	priv_cmd+="mount -oremount,bind,ro '$FUNC_UNION_ROOT$dir'; "
-done
-
-if [[ ${FUNC_PROOT+defined} ]]; then
-	export PROOT_NO_SECCOMP=1
-	proot --rootfs="$FUNC_UNION_ROOT" "${opts[@]}" $cmd "$*"
-else
-	unshare --map-root-user --mount --fork "${opts[@]}" \
-		bash -c "$priv_cmd chroot '$FUNC_UNION_ROOT' $cmd" 
-fi
+$tool "$@"

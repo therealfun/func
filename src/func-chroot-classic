@@ -1,0 +1,57 @@
+#!/bin/bash
+
+add_mount() {
+	local src=$1
+	local dest=${2:-$src}
+	dest="$FUNC_UNION_ROOT$dest"
+	if [[ -d $src ]]; then
+		mkdir --parents "$dest"
+	else # is file
+		mkdir --parents "${dest%/*}"
+	fi
+	priv_cmd+="mount --rbind '$src' '$dest'; "
+}
+
+# unshare is for convenience, to avoid explicit umount commands
+unshare="unshare --mount-proc --fork"
+[[ -e /proc/self/ns/pid ]] && unshare+=" --pid"
+[[ -e /proc/self/ns/uts ]] && {
+	unshare+=" --uts"
+	priv_cmd="hostname host; "
+}
+
+add_mount /dev
+add_mount /tmp
+add_mount /sys
+priv_cmd+="mount --types proc proc '$FUNC_UNION_ROOT/proc'; "
+
+cwd=
+if [[ ${FUNC_DONT_BIND_CWD+defined} ]]; then
+	cwd=/
+else
+	cwd=/home/u/${PWD##*/}
+	add_mount "$PWD" "$cwd"
+fi
+
+if [[ $FUNC_ROOT == / ]]; then
+	cmd="bash -c 'cd \"$cwd\"; $@'"
+else
+	# We want a clean environment with proper HOME set
+	cmd="env --ignore-environment HOME=/home/u"
+
+	# We want to include the preconfigured environment from /etc/profile
+	cmd+=" bash --login -c 'cd \"$cwd\"; $@'"
+fi
+
+read -r -a a <<< "$FUNC_BIND"
+for mnt in "${a[@]}"; do
+	IFS=: read -r src dest <<< "$mnt"
+	add_mount "$src" "$dest"
+done
+
+read -r -a a <<< "$FUNC_BIND_RO"
+for mnt in "${a[@]}"; do
+	priv_cmd+="mount -oremount,bind,ro '$FUNC_UNION_ROOT$mnt'; "
+done
+
+exec $unshare bash -c "$priv_cmd chroot '$FUNC_UNION_ROOT' $cmd" 

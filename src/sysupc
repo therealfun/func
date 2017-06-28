@@ -1,94 +1,65 @@
 #!/bin/bash
 
-main() {
-	setup_variables
+run_me_in_container() {
+	export FUNC_DONT_BIND_CWD=not_needed
+	exec ${BASH_SOURCE%/*}/func      \
+		clone        /    auto   \
+		pkgmk        auto auto   \
+		ccache                   \
+		oprt                     \
+		prt-get                  \
+		chroot                   \
+		bash < <(
+			sed 's/^run_me_in_container$/run_me/' \
+				< $BASH_SOURCE
+		)
+}
 
-	if [[ ${SYSUPC_USE_PRT_GET+defined} ]]; then
-		system_upgrade_with_prt_get
+run_me() {
+	if have_oprt; then
+		sysupc_with_oprt
 	else
-		system_upgrade_with_oprt
+		sysupc_with_prt_get
 	fi
 }
 
-setup_variables() {
-	local _DIRS=($(
-		. /etc/pkgmk.conf
-		echo $PKGMK_PACKAGE_DIR
-		echo $PKGMK_SOURCE_DIR
-	))
+have_oprt() {
+	oprt=$(which oprt)
 
-	export FUNC_BIND+=" ${_DIRS[@]}"
-	export FUNC_DONT_EXPORT_CWD=1
-	export FUNC_ROOT=/
+	[[ -x $oprt ]]
+}
+
+sysupc_with_oprt() {
+	export OPRT_BUILD_WITH_FAKEROOT=needed_by_some_ports
+	export OPRT_INSTALL_WITH_FORCE=do_not_care
+	export OPRT_SKIP_REJMERGE=do_not_care_rejmerge
+	export OPRT_DONT_LOG=do_not_pollute_the_log_if_mounted
+	export OPRT_DONT_RUN_SCRIPTS=lilo_fails_installing_kernel
+	export OPRT_DONT_ASK_SCRIPT=we_dont_run_scripts
+
+	# avoid rebuilding some big packages
+	[[ ${REVDEP_OPTS+defines} ]] \
+		&& export OPRT_REVDEP=$REVDEP_OPTS
+
+	set -o xtrace
+	oprt-update
+}
+
+sysupc_with_prt_get() {
+	# lilo fails installing linux-stable
+	ed -s /etc/prt-get.conf <<-EOF
+		g/runscripts/d
+		w
+	EOF
+
+	set -o xtrace
+	prt-get sysup || exit 1
 
 	[[ ${REVDEP_OPTS+defined} ]] \
 		|| REVDEP_OPTS="-i libreoffice"
-	export REVDEP_OPTS="${REVDEP_OPTS//[^a-zA-Z0-9 -]/}"
-}
+	REVDEP_OPTS="${REVDEP_OPTS//[^a-zA-Z0-9 -]/}"
 
-system_upgrade_with_prt_get() {
-	func bash <(
-		declare -f                    \
-			ccache_reset_stats    \
-			ccache_show_stats     \
-			is_ccache_enabled     \
-			upgrade_with_prt_get
-
-		echo   "upgrade_with_prt_get"
-	)
-}
-
-system_upgrade_with_oprt() {
-	# we need fakeroot because of ports like dcron, dbus
-	export OPRT_BUILD_WITH_FAKEROOT=1
-	export OPRT_INSTALL_WITH_FORCE=1
-	export OPRT_SKIP_REJMERGE=1
-	export OPRT_REVDEP=$REVDEP_OPTS
-
-	func bash <(
-		declare -f                 \
-			ccache_reset_stats \
-			ccache_show_stats  \
-			is_ccache_enabled  \
-			upgrade_with_oprt
-
-		echo "upgrade_with_oprt"
-	)
-}
-
-ccache_reset_stats() {
-	is_ccache_enabled \
-		&& ccache --zero-stats
-}
-
-ccache_show_stats() {
-	is_ccache_enabled \
-		&& ccache --show-stats
-}
-
-is_ccache_enabled() {
-	[[ ${CCACHE_DIR+defined} && -x /usr/bin/ccache ]]
-}
-
-upgrade_with_oprt() {
-	# do not run install scripts in container
-	echo > ${HOME}/.cache/oprt/run_script
-
-	ccache_reset_stats
-	( set -o xtrace; oprt-update ) || exit 1
-	ccache_show_stats
-}
-
-upgrade_with_prt_get() {
-	# do not run install scripts in container
-	sed 's/runscripts.*//' --in-place /etc/prt-get.conf
-
-	ccache_reset_stats
-	( set -o xtrace; prt-get sysup ) || exit 1
-	ccache_show_stats
-
-	set -o xtrace
 	revdep $REVDEP_OPTS | xargs --no-run-if-empty prt-get update -fr
 }
 
-main
+run_me_in_container

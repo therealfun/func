@@ -1,119 +1,12 @@
 #!/bin/bash
 
-main() {
-	local chroot_dir=$1
+if (( $UID == 0 )); then
+	type=configure-root
+else
+	printf 'ERROR: unsupported non-root for the time being\n'
+	exit 1
+fi
 
-	setup_pkgmk_dirs "$chroot_dir"
+set -- $type "$@"
 
-	cp --archive --verbose     \
-		/etc/resolv.conf   \
-		/etc/localtime     \
-		"$chroot_dir/etc/"
-
-	local func_chroot=${BASH_SOURCE%/*}/func-chroot
-
-	export FUNC_ROOT=$chroot_dir
-
-	$func_chroot bash <(
-		declare -f container_config
-		echo       container_config
-	)
-
-	$func_chroot rejmerge
-}
-
-setup_pkgmk_dirs() {
-	local chroot_dir=$1
-
-	[[ -e "$chroot_dir/default_dirs" ]] || {
-		cat <<-EOF
-		PKGMK_SOURCE_DIR  /var/cache/src
-		PKGMK_PACKAGE_DIR /var/cache/pkg
-		PKGMK_WORK_DIR    /var/cache/work
-		EOF
-	} > "$chroot_dir/default_dirs"
-}
-
-container_config() {
-	set -o errexit
-	set -o xtrace
-
-	sed -e '/PS1/d' -e '/PS2/d' --in-place /etc/profile
-	(
-		printf 'export PS1="%s"\n' ": \w ; "
-		printf 'export PS2="%s"\n' " "
-		grep LANG= /etc/profile >/dev/null \
-			|| echo 'export LANG=en_US.UTF-8'
-	) >> /etc/profile
-
-	while read -r name dir; do
-		! egrep "^\\s*$name=" /etc/pkgmk.conf >/dev/null \
-			|| continue
-		[[ -d $dir ]] \
-			|| mkdir --parents "$dir"
-		echo "$name=$dir" >> /etc/pkgmk.conf
-	done < /default_dirs
-
-	# setup language to avoid some warnings/errors
-	localedef --inputfile=en_US --charmap=UTF-8 en_US.UTF-8
-
-	# therealfun repo
-	cat >/etc/ports/therealfun.httpup <<-EOF
-	ROOT_DIR=/usr/ports/therealfun
-	URL=https://raw.githubusercontent.com/therealfun/crux-ports/master/
-	EOF
-	cat >/etc/ports/therealfun.pub <<-EOF
-	untrusted comment: therealfun public key
-	RWTcI5d5qAlZ8u0wrrc4B6AbKFmqJgZWHnYQq+6HxIoFsKc5S0EJkJMm
-	EOF
-	egrep 'therealfun' /etc/prt-get.conf \
-		|| echo prtdir /usr/ports/therealfun >>/etc/prt-get.conf
-
-	# enable inactive ports
-	for repo in /etc/ports/*.{rsync,git,httpup}.inactive; do
-		[[ -e $repo ]] || continue
-		mv $repo ${repo%.inactive}
-		name=${repo##*/}
-		echo prtdir /usr/ports/${name%%.*} >>/etc/prt-get.conf
-		
-	done
-
-	# update ports
-	ports --update || true
-
-	# Set 'runscripts' to NO unless is already configured.
-	# It flags that we have run the post-install scripts.
-	egrep '^\s*runscripts' /etc/prt-get.conf || (
-		prt-get listinst \
-			| xargs --max-args=1 prt-get path \
-			| xargs --max-args=1 --replace=pk \
-				sh -c 'test -f pk/post-install && sh -x pk/post-install' \
-			|| true
-		echo 'runscripts no' >> /etc/prt-get.conf
-	)
-
-	egrep '^\s*makecommand' /etc/prt-get.conf || (
-		echo 'makecommand nice --adjustment=19 ionice --class idle pkgmk' \
-			>> /etc/prt-get.conf
-	)
-
-	# upgrade pkgutils first
-	prt-get update pkgutils --install-scripts
-
-	# hard to live without these
-	prt-get depinst fakeroot prt-utils ccache oprt --install-scripts
-
-	# clean-up
-	rm /var/cache/src/* /var/cache/pkg/* || true
-
-	# setup ccache to the safest (slow) mode unless is already configured
-	grep CCACHE_DIR /etc/profile || (
-		mkdir --parents /var/cache/ccache
-		echo 'export CCACHE_DIR=/var/cache/ccache'
-		echo 'export CCACHE_COMPILERCHECK="string:\$(gcc -dumpversion; crux)"'
-		echo 'export CCACHE_NODIRECT=1'
-		echo 'export PATH="/usr/lib/ccache:\$PATH"'
-	) >> /etc/profile
-}
-
-main ${1:-/var/cache/func-root}
+. ${BASH_SOURCE%/*}/func

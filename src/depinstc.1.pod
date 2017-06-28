@@ -10,27 +10,25 @@ depinstc [port_dir ...]
 
 =head1 DESCRIPTION
 
-B<depinstc> takes a lists of port directories (or it will use the current directory), and for each, separately, it will download, build the port, including its dependencies.
+B<depinstc> takes a lists of port directories (or use the current directory), makes a dependency tree, and for each port it will create a temporary container, download and build the port. The built packages are keept (and shared between these containers) in order to avoid redundant builds.
 
-All the dependencies are recursively built using temporary containers (automatically deleted if the build succeed). The resulting packages will always be keept. The ports from the command line will have the .footprint and .signature regenerated, and revdep(1), prtverify(1), finddeps(1) and findredundantdeps(1) will be used to check the port.
+The ports from the command line will have the .footprint and .signature regenerated, and revdep(1), prtverify(1), finddeps(1) and findredundantdeps(1) will be used to check the port.
 
-The pre/post install scripts are disabled when building using the real root as a template container (C<FUNC_ROOT=/>), in order to avoid some errors.
+The pre/post install scripts are disabled when building using the real root as a template container (C<FUNC_ROOT=/>), in order to avoid some rare errors (eg. lilo failing).
 
-It is only usefull if B<pkgmk> is configured with shared directories.
+It was tested with B<pkgmk> configured with shared directories. If started by the root user (to have write access to F</usr/ports>), it might work with the default settings of B<pkgmk> too.
 
 =head1 EXAMPLES
 
-Build the port from the current directory. The dependencies will be downloaded and installed (in the container) if not already present (in the real root F</>):
+Build the port from the current directory, with all its dependencies (if not already installed in the real root F</>):
 
-	export FUNC_ROOT=/
-	depinstc
+	FUNC_ROOT=/ depinstc
 
 Same as above, but with an explicit directory:
 
-	export FUNC_ROOT=/
-	depinstc /usr/ports/contrib/X
+	FUNC_ROOT=/ depinstc /usr/ports/contrib/X
 
-Build the port from the current directory, using the root from B<$FUNC_ROOT> (default to F</var/cache/func-root>, built in advance with func-create(8), func-configure(8) and func-upgrade(8)):
+Build the port from the current directory, using the root from B<$FUNC_ROOT> (default to F</var/cache/func-root>, built in advance with C<sudo func create auto configure auto>):
 
 	depinstc
 
@@ -38,9 +36,9 @@ Same as above, but with an explicit directory:
 
 	depinstc my_ports/X
 
-Build all your ports:
+Build all the ports from a repository:
 
-	cd my_ports && depinstc */
+	cd repo && depinstc */
 
 =head1 ENVIRONMENT
 
@@ -48,38 +46,23 @@ Build all your ports:
 
 =item B<SEC_KEY> (default: F<$HOME/.ssh/crux-ports.sec>)
 
-The port will be signed with this key (if exists).
+The ports from the command line will be signed with this key (if exists).
 
 =item B<PUB_KEY> (default: F</etc/ports/my.pub>)
 
-The name of the public key used to check the F<.signature> file.
+The B<SEC_KEY> pair. The regenerated F<.signature> files will have this public key set.
 
 =item B<SHARED_SRC> (default: $PKGMK_SOURCE_DIR)
 
-The directory holding the sources.
+The host directory holding the sources.
 
-=item B<SHARED_PKG> (default: $FUNC_COW_BASE/shared_pkg)
+=item B<SHARED_PKG> (default: $PKGMK_PACKAGE_DIR)
 
-The directory holding the built packages. It is overwritten with B<$PKGMK_SOURCE_DIR
-> when building with I<FUNC_ROOT=/>.
-
-=item B<CCACHE_DIR>
-
-If set, the ccache(1) settings will be reset before each build, and displayed after each build. If you use a container configured with func-configure(8), all that is needed is for ccache(1) to be enabled on the real system (have B<CCACHE_DIR> set in the current encvironment).
+The host directory holding the built packages.
 
 =item B<FUNC_ROOT> (default: F</var/cache/func-root>)
 
-The read-only root (F</>) template.
-
-=item B<FUNC_COW_BASE> (default: $HOME/tmp)
-
-The temporary container will be created in B<$FUNC_COW_BASE/depinstc.$port>.
-
-The resulting packages will be in B<$FUNC_COW_BASE/shared_pkg>.
-
-=item B<DEPINSTC_USE_PRT_GET> (default: not set)
-
-If set, B<prt-get> will be used instead of B<oprt>.
+The directory used as a template for the temporary container.
 
 =back
 

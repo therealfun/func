@@ -1,0 +1,24 @@
+#!/bin/bash
+
+if   [[ $1 == ""   ]]; then
+	exit 1
+elif [[ $1 == auto ]]; then
+	FUNC_ROOT=${FUNC_ROOT:-/var/cache/func-root}
+else
+	FUNC_ROOT=$1
+fi
+
+[[ $FUNC_ROOT == / ]] && exit 1 # seppuku not allowed
+
+echo "Building $FUNC_ROOT.tar.xz ..."
+
+bsdtar  --strip-components 1       \
+	--create                   \
+	--file "$FUNC_ROOT.tar.xz" \
+	"$FUNC_ROOT"
+
+if (( $? == 0 )); then
+	echo "Done"
+else
+	echo "Failed"
+fi

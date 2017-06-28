@@ -1,0 +1,37 @@
+#!/bin/bash
+
+main() {
+	if   [[ $1 == ""   ]]; then
+		exit 1
+	elif [[ $1 == auto ]]; then
+		FUNC_ROOT=${FUNC_ROOT:-/var/cache/func-root}
+	else
+		FUNC_ROOT=$1
+	fi
+
+	[[ $FUNC_ROOT == / ]] && exit 1 # seppuku not allowed
+
+	func_cmd=${BASH_SOURCE%/*}/func
+
+	export FUNC_ROOT
+	export FUNC_UNION_ROOT=${FUNC_UNION_ROOT:-$FUNC_ROOT}
+	FUNC_DONT_BIND_CWD=not_needed \
+	$func_cmd chroot-classic bash < <(
+		sed 's/^main "$@"$/container_upgrade/' \
+			< $BASH_SOURCE
+	) || exit 1
+
+	# chaining with another func tool
+	shift
+	. $func_cmd
+}
+
+container_upgrade() {
+	set -o errexit
+	set -o xtrace
+	ports --update
+	prt-get sysup --install-scripts
+	revdep | xargs --no-run-if-empty prt-get update -fr --install-scripts
+}
+
+main "$@"

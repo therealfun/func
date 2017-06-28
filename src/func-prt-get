@@ -1,0 +1,30 @@
+#!/bin/bash
+
+[[ -d "$FUNC_COW/etc" ]] \
+	|| mkdir "$FUNC_COW/etc"
+
+src_conf=/etc/prt-get.conf
+dest_conf="$FUNC_COW/etc/prt-get.conf"
+
+sed "s/sudo/fakeroot/g" < "$src_conf" > "$dest_conf"
+
+[[ ${FUNC_DONT_BIND_CWD+defined} ]] || {
+	ed -s "$dest_conf" <<-EOF
+		1i
+		prtdir /home/u
+		.
+		w
+	EOF
+}
+
+[[ $FUNC_ROOT != / ]] && {
+	ed -s "$dest_conf" <<-EOF
+		g/${HOME//\//\\/}/s/${HOME//\//\\/}/\/home\/u/
+		w
+	EOF
+	# avoid funddeps and findredundantdeps errors
+	FUNC_BIND+="    $HOME/.cache/pp"
+	FUNC_BIND_RO+=" $HOME/.cache/pp"
+}
+
+. ${BASH_SOURCE%/*}/func

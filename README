@@ -1,0 +1,26 @@
+# func - fun with containers
+
+Tools to run port commands in containers:
+
+  - create - create a chroot starting from the CRUX ISO hosted on the CRUX mirrors
+  - configure - (re)configure a previously created container
+  - upgrade - upgrade a container
+  - clean - clean-up a container
+  - pack - pack a container (for docker and al.)
+  - clone - create a temporary container
+  - chroot - run a command in a container
+  - pkgmk - mount pkgmk directories in a container
+  - ports - mount ports directories in a container
+  - ccache - mount the ccache directory in a container
+  - oprt - mount oprt settings directory in a container
+  - prt-get - adapt /etc/prt-get.conf in a container
+
+See func(1) or [src/func.1.pod] for more info.
+
+# TODO
+
+  - non-root user alternatives for: create, configure, upgrade, clean, pack (maybe using fakeroot -i load-file -s save-file, or with a proot archive)
+  - chroot-fakechroot
+  - chroot-container
+  - chroot-bubblewrap
+  - chroot-docker

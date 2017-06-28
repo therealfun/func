@@ -2,111 +2,218 @@
 
 =head1 NAME
 
-func - run commands in a temporary container
+func - fun tools to run port commands in temporary containers
 
 =head1 SYNOPSIS
 
-func command...
-
-=head1 DESCRIPTION
-
-B<func> is a chroot(1) command replacement, used by a non-root user to build ports in a temporary filesystem container, created on the fly from a root template (either the real root (F</>) or a previously created root directory).
-
-The func-create(8), func-configure(8) and func-upgrade(8) scripts can be used to prepare such a root directory. These are the only commands needed to be run as root.
-
-unionfs(8), an union filesystem based on fuse(8), is used to make a union from a read-only directory (lower layer) and read/write directory (upper layer).
-
-Two methods are used to run commands in container:
-
-=over 4
-
-=item namespaces(7)
-
-This method needs kernel support: mount_namespaces(7) for C<mount --bind> and user_namespaces(7) for chroot(1). This method is 2-3 times faster than the next method, but still 2 times slower than running on the real system. These numbers might be the worst scenario, because the builds were measured on a system with slow a disk, without compilation (100% ccache hits), and without using C<-jN> in B<MAKEOPTS>. The footprint won't match when building packages that set specific group names (like dbus).
-
-=item B<proot>
-
-B<PRoot> (a user-space implementation of chroot, mount --bind, and binfmt_misc) uses ptrace to contain the program. It should work almost everywhere. This method can be forced by setting B<FUNC_PROOT> variable. Because C<proot> can't enforce read-only mounts in the container, B<FUNC_BIND_RO> is ignored.
-
-=back
+func tool...
 
 =head1 EXAMPLES
 
-Get a shell in container, with the current directory mounted as I</home/u/$cwd>:
+Create a file in a temporary container based on the real root (F</>):
 
-	func bash
+	func clone / auto chroot "touch /xxx; ls -l /"
+	ls -l /
 
-Get a shell in a volatile root (F</>), useful when building the kernel:
+Create and configure a container in F</var/cache/func-root>, and pack it for docker:
 
-	FUNC_ROOT=/ func bash
+	sudo func create auto configure auto upgrade auto clean auto pack auto
 
-Same, but keep the changes into /tmp/xxx, to reuse the session:
+Or in any other directory:
 
-	FUNC_ROOT=/ FUNC_COW=/tmp/xxx func bash
+	sudo func create /here configure auto upgrade auto clean auto pack auto
+
+Create and configure a container in /my-chroot:
+
+	sudo func create /my-chroot configure auto
+
+Generic (as root or non-root user) change a file in temporary container, based on F</my-chroot>:
+
+	func clone /my-chroot auto chroot cat /etc/profile
+	func clone /my-chroot auto chroot "touch /xxx; ls -l /"
+	ls -l /my-chroot/
+
+Mount the local ports (F</etc/ports>, F</usr/ports>) too:
+
+	func clone /my-chroot auto ports chroot ls -l /etc/ports
+
+Get a shell in F</my-chroot>, with the current directory mounted as I</home/u/$cwd>:
+
+	func clone /my-chroot auto chroot bash
+
+Get a shell in a temporary root (F</>):
+
+	func clone / auto chroot bash
+
+Same, but keep the changes in F</tmp/xxx>, to reuse the session:
+
+	func clone / /tmp/xxx chroot bash
 
 Build the port from the current directory:
 
-	func pkgmk -d
+	func clone / auto chroot fakeroot pkgmk -d
 
-Build the port from the current directory, with all its dependencies, even if not listed in F</etc/prt-get.conf>:
+Get a shell in order to test the port from the current directory:
 
-	func prt-get depinst $(basename $PWD)
+	func clone auto auto ports pkgmk auto auto prt-get chroot bash
 
-Building dbus without footprint mismatch and keep the package:
+Build the port from the current directory, with all its dependencies, even if the port is not listed in F</etc/prt-get.conf>:
+
+	func clone / auto ports pkgmk auto auto prt-get chroot prt-get depinst $(basename $PWD)
+
+Use the B<proot> backend, to workaround footprint mismatches with packages setting the setuid flags on some files:
 
 	cd /usr/ports/opt/dbus
-	FUNC_PROOT=1 FUNC_ROOT=/ FUNC_BIND=/var/cache/pkg func fakeroot pkgmk
+	FUNC_PROOT=1 func clone / auto pkgmk auto auto chroot fakeroot pkgmk
 
-Testing a port and keep the resulting packages:
+Build a port and keep the resulting packages:
 
-	export FUNC_BIND="/var/cache/src /var/cache/pkg"
-	export FUNC_COW=$HOME/tmp/port
-	cd port
-	func bash <<EOF
-		prt-get depinst port
-		pkgmk --update-footprint
-		pkgmk --update-md5sum
+	func clone / auto pkgmk auto auto ports prt-get chroot bash <<EOF
+		fakeroot prt-get depinst port
 		revdep port
 		prtverify .
 		finddeps port
 		findredundantdeps port
 	EOF
-	mv -v $FUNC_COW/var/cache/pkg/* /var/cache/pkg/
-	rm -rf $FUNC_COW
 
-See depinstc(1) for a more complex usage.
+See syspupc(1) and depinstc(1) for more practical examples.
 
-=head1 NOTES
+=head1 DESCRIPTION
 
-Things done to accomodate building the ports in container:
+The B<func> program is a glue for all the I<func> tools. For example, the command:
+
+	func clone / auto chroot ls -l /
+
+it is a shortcut for:
+
+	func-clone  / auto
+	func-chroot ls -l /
+
+meaning: clone the F</>, with an automatic management of a temporary writable directory, make an union with these two directories, chroot to the union and run C<"ls -l /">.
+
+B<func> is a very simple bash script that locates a tool (its first argument) and execute it (passing it all the other arguments). The tool consumes its arguments, and use B<func> to execute the next tool.
+
+=head1 TOOLS
 
 =over 4
 
-=item arguments
+=item B<create-root> dir|auto (B<root user>)
 
-To support C<func cmd>, C<func bash>, C<func bash -c ...> and C<func <<EOF...>, combined with FUNC_ROOT set to F</> or not, with B<proot> and namespaces(7), and with B<FUNC_DONT_EXPORT_CWD>, a complex form of voodoo is used, and can backfire with some forms of C<func bash -c...>.
+Creates a chroot starting from the CRUX ISO hosted on the CRUX mirrors. All the core packages are I<installed> with C<pkgadd --root $dir...>.
 
-=item the current directory
+Not needed if you use B<func> tools with the host root F</> only.
 
-The current directory is considered a port, and it is mounted in container by default as F</home/u/$cwd> (unless B<FUNC_DONT_EXPORT_CWD> is set). The line C<prtdir /home/u> is inserted as the first line in F</etc/prt-get.conf>.
+The F</var/cache/func-root> will be used as a destination directory if B<auto> is given as an argument.
 
-=item fakeroot
+The directory should be empty or missing.
 
-B<proot> and user_namespaces(7) can fake the root user (B<UID>/B<GID>), but B<fakeroot> is still needed in container, to handle the ownership changes, when builds are using commands like: C<chown daemon:nobody file>, or when B<sudo> is used in the config files.
+=item B<create> dir|auto
 
-=item ports and F</etc/prt-get.conf>
+Currently, it calls B<create-root>.
 
-Unless using C<FUNC_ROOT=/>, the F</etc/ports> and F</usr/ports> are always mounted.
+=item B<configure-root> dir|auto (B<root user>)
 
-The real F</etc/prt-get.conf> file is always copied, regardless B<FUNC_ROOT>.
+Configures or reconfigures a chroot: resolv.conf, localtime, localedef, pkgmk.conf, prt-get.conf, repositories (therealfun and all inactive), update /usr/ports, upgrade pkgutils, install ports (fakeroot, prt-utils, ccache and therealfun/oprt), enable ccache, rejmerge.
 
-=item sudo
+Not needed if you use B<func> tools with the host root F</> only.
 
-The real F</etc/prt-get.conf>, most probably, has B<sudo> with a non-standard usage. The C<sudo> is replaced with C<fakeroot sudo> and a new /etc/sudoers is created in container, allowing all commands.
+The F</var/cache/func-root> will be used if B<auto> is given as an argument.
 
-=item variable environment
+=item B<configure> dir|auto
 
-Unless using C<FUNC_ROOT=/>, the environment is cleared (C<env --ignore-environment>), and only B<HOME> is set before entering in container. The commands are started with C<bash --login> to make sure F<$FUNC_ROOT/etc/profile> is used (where PATH, CCACHE_DIR and other variables are set).
+Currently, it calls B<configure-root>.
+
+=item B<upgrade-root> dir|auto (B<root user>)
+
+Upgrades a chroot with:
+
+	ports --update
+	prt-get sysup --install-scripts
+	revdep | xargs --no-run-if-empty prt-get update -fr --install-scripts
+
+The F</var/cache/func-root> will be used if B<auto> is given as an argument.
+
+=item B<upgrade> dir|auto
+
+Currently, it calls B<upgrade-root>.
+
+=item B<clean-root> dir|auto (B<root user>)
+
+Removes the sources and the packages from pkgmk directory, and recreate the F</root> directory, as it might have F<.ccache> or other directories.
+
+The F</var/cache/func-root> will be used if B<auto> is given as an argument.
+
+=item B<clean> dir|auto
+
+Currently, it calls B<clean-root>.
+
+=item B<pack-root> dir|auto (B<root user>)
+
+Makes an archive from the B<dir> directory (or F</var/cache/func-root> if B<auto> is used). Used to create an docker image.
+
+=item B<pack> dir|auto
+
+Currently, it calls B<pack-root>.
+
+=item B<clone-unionfs> read_only_template_dir|auto writable_dir|auto
+
+Uses unionfs-fuse(1) to make an union (with copy-on-write) with B<read_only_template_dir> and B<writable_dir>, exported under I<$FUNC_UNION_ROOT> directory.
+
+If B<auto> is used for the first directory, B<$FUNC_ROOT> will be used if exists as a directory, or F</var/cache/func-root>, or F</>.
+
+If B<auto> is used for the second directory, it will be created under the B<$FUNC_COW_BASE> directory, and deleted on exit.
+
+Currently, this is configured to work only as a non-root user.
+
+=item B<clone-overlayfs> read_only_template_dir|auto writable_dir|auto (B<root user>)
+
+Same as B<clone-unionfs>, but works only for the root user.
+
+=item B<clone> read_only_template_dir|auto writable_dir|auto
+
+Calls B<clone-unionfs> or B<clone-overlayfs>, depending on the case.
+
+=item B<chroot-classic> command... (B<root user>)
+
+Runs C<chroot $FUNC_UNION_ROOT command...>.
+
+Works only for the root user. It needs mount_namespaces(7), to make the mounts easier to reverse (should be enabled by default in kernel).
+
+=item B<chroot-namespaces> command...
+
+Same as B<chroot-classic>, but works for non-root users.
+
+It needs mount_namespaces(7) (enabled by default in linux kernel) for C<mount --bind> and user_namespaces(7) for chroot(1).
+
+=item B<chroot-proot> command...
+
+Same as B<chroot-namespaces>, but it doesn't need special kernel support, just the proot(1) program. It is slower than B<chroot-namespaces> because it uses C<PROOT_NO_SECCOMP=1>.
+
+=item B<chroot> command...
+
+Calls B<chroot-classic>, B<chroot-namespaces> or B<chroot-proot>, depending on the use case.
+
+=item B<pkgmk> none|auto|src_dir none|auto|pkg_dir
+
+Controls the mounting of I<$PKGMK_SOURCE_DIR>, I<$PKGMK_PACKAGE_DIR> and I<$PKGMK_WORK_DIR> in container.
+
+B<none> means it won't be mounted, B<auto> means it will be mounted to the corresponding host dir (unless is useless), while any other string will be considered a host directory. The I<$PKGMK_WORK_DIR> is considered auto (to speed-up the builds).
+
+=item B<ports>
+
+Mounts F</etc/ports>, F</usr/ports> and I<$HOME/.cache/pp> (if exists) in container.
+
+=item B<ccache>
+
+Mounts I<$CCACHE_DIR> in container.
+
+=item B<oprt>
+
+Mounts I<$HOME/.cache/oprt> in container.
+
+=item B<prt-get>
+
+Replaces I<sudo> with I<fakeroot> and adds F</home/u> as the first B<prtdir> (if FUNC_ROOT != /) in F</etc/prt-get.conf> (in container).
 
 =back
 
@@ -114,47 +221,35 @@ Unless using C<FUNC_ROOT=/>, the environment is cleared (C<env --ignore-environm
 
 =over 4
 
-=item FUNC_ROOT (default: F</var/cache/func-root>)
+=item B<FUNC_ROOT> (default: F</var/cache/func-root>)
 
-The read-only root directory. Should be set to F</> when building packages against the main system.
+Should be set to F</> when building packages against the main system.
 
-=item FUNC_UNION_ROOT (default: F</tmp/func.$pid>)
+This variable is set by the B<clone> tools when B<auto> is the first argument.
 
-The union directory, merging the read-only B<FUNC_ROOT> and read/write B<FUNC_COW>.
-
-=item FUNC_COW_BASE (default: F<$HOME/tmp>)
+=item B<FUNC_COW_BASE> (default: F<$HOME/tmp>)
 
 The containers (B<FUNC_COW>) are created in this directory.
 
-=item FUNC_COW (default: F<$FUNC_COW_BASE/func.$pid.changes>)
+=item B<FUNC_COW> (default: F<$FUNC_COW_BASE/func.$pid.changes>)
 
-The upper layer, holding the new/modified files.
+The upper layer in the unionfs/overlayfs, holding the new/modified files.
 
-If the default is used, the directory will be automatically cleared before and after the build commands.
+If the default is used, the directory will be automatically cleared before and removed on exit.
 
-=item FUNC_DONT_EXPORT_CWD (not set by default)
+=item B<FUNC_UNION_ROOT> (default: F</tmp/func.$pid>)
 
-If this variable is set, B<func> won't export the current directory as F</home/u/$cwd> and won't add F</home/u> to F</etc/prt-get.conf>.
+The union directory, merging the read-only B<FUNC_ROOT> and read/write B<FUNC_COW>.
 
-=item FUNC_CHROOT_HOME (default: F</home/u>)
-
-The B<HOME> environment variable inside the chroot.
-
-This is used to make the build reproductible.
-
-=item FUNC_BIND
+=item B<FUNC_BIND>
 
 List of space separated paths for extra bindings. Eg. C<$HOME/.ccache:/var/cache/ccache /var/cache/distfiles> will mount F<$HOME/.ccache> in I<$FUNC_UNION_ROOT/var/cache/ccache> and F</var/cache/distfiles> in I<$FUNC_UNION_ROOT/var/cache/distfiles>.
 
-=item FUNC_BIND_RO
+=item B<FUNC_BIND_RO>
 
 List of space separated paths (destinations paths from B<$FUNC_BIND>) which should be read-only. Ignored with B<proot> method.
 
 =back
-
-=head1 CAVEATS
-
-unionfs(8) is not tested upstream in these conditions (with cow and relaxed_permissions options): when a file has to be written (even when the non-root user doesn't have to rights to do it in the lower layer), a copy of that file is made in the read/write directory (the upper layer), and used from there. However, vanilla unionfs seems to be enough to build a lot of ports. A patch is needed to avoid a footprint mismatch on file rights when building python (and probably others).
 
 =head1 COPYRIGHT AND LICENSE
 

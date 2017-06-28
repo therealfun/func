@@ -1,0 +1,12 @@
+#!/bin/bash
+
+[[ $CCACHE_DIR != "" && -x "$FUNC_ROOT/usr/bin/ccache" ]] && {
+	read -r there < <(
+		. $FUNC_ROOT/etc/profile
+		printf '%s\n' "$CCACHE_DIR"
+	)
+	[[ $there != "" ]] \
+		&& FUNC_BIND+=" $CCACHE_DIR:$there"
+}
+
+. ${BASH_SOURCE%/*}/func

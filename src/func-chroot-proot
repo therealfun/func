@@ -1,0 +1,29 @@
+#!/bin/bash
+
+chroot="proot --rootfs=$FUNC_UNION_ROOT --root-id"
+chroot+=" --bind=/dev --bind=/sys --bind=/proc --bind=/tmp"
+
+if [[ ${FUNC_DONT_BIND_CWD+defined} ]]; then
+	chroot+=" --cwd=/"
+else
+	cwd="/home/u/${PWD##*/}"
+	chroot+=" --cwd=$cwd --bind=$PWD:$cwd"
+fi
+
+if [[ $FUNC_ROOT == / ]]; then
+	cmd="bash -c"
+else
+	# We want a clean environment with proper HOME set
+	cmd="env --ignore-environment HOME=/home/u"
+
+	# We want to include the preconfigured environment from /etc/profile
+	cmd+=" bash --login -c"
+fi
+
+read -r -a a <<< "$FUNC_BIND"
+for mnt in "${a[@]}"; do
+	chroot+=" --bind=$mnt"
+done
+
+export PROOT_NO_SECCOMP=1
+exec $chroot $cmd "$*"

@@ -1,0 +1,7 @@
+#!/bin/bash
+
+[[ -d "$HOME/.cache/oprt" ]] && {
+	FUNC_BIND+=" $HOME/.cache/oprt:/home/u/.cache/oprt"
+}
+
+. ${BASH_SOURCE%/*}/func

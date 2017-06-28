@@ -1,0 +1,10 @@
+#!/bin/bash
+
+FUNC_BIND+=" /etc/ports /usr/ports"
+
+[[ -d $HOME/.cache/pp ]] && {
+	FUNC_BIND+="    $HOME/.cache/pp:/home/u/.cache/pp"
+	FUNC_BIND_RO+="                 /home/u/.cache/pp"
+}
+
+. ${BASH_SOURCE%/*}/func

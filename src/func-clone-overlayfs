@@ -1,0 +1,57 @@
+#!/bin/bash
+
+(( $# < 2 )) && exit 1
+
+_FUNC_ROOT=$1
+_FUNC_COW=$2
+shift 2
+
+if [[ $_FUNC_ROOT == auto ]]; then
+	[[ -d $FUNC_ROOT ]] || {
+		FUNC_ROOT=/var/cache/func-root
+		[[ -d $FUNC_ROOT ]] || FUNC_ROOT=/
+	}
+else
+	FUNC_ROOT=$_FUNC_ROOT
+fi
+
+if [[ $_FUNC_COW == auto ]]; then
+	[[ -d $FUNC_COW ]] || {
+		[[ -d $FUNC_COW_BASE ]] || FUNC_COW_BASE=$HOME/tmp
+		auto_FUNC_COW="$FUNC_COW_BASE/func.$$.changes"
+		FUNC_COW=$auto_FUNC_COW
+	}
+else
+	FUNC_COW=$_FUNC_COW
+fi
+
+[[ -d $FUNC_UNION_ROOT ]] || FUNC_UNION_ROOT=$HOME/tmp/func.$$
+
+cleanup_union() {
+	local err=$?
+	umount "$FUNC_UNION_ROOT"
+	rmdir   "$FUNC_UNION_ROOT"
+	[[ $FUNC_COW == $auto_FUNC_COW ]] \
+		&& rm --recursive --force "$FUNC_COW"
+	rm --recursive --force "$FUNC_COW.tmp"
+	exit $err
+}
+
+trap cleanup_union  EXIT
+trap "exit 1"       INT HUP QUIT TERM
+
+for d in "$FUNC_UNION_ROOT" "$FUNC_COW" "$FUNC_COW.tmp"; do
+	[[ -d $d ]]                     \
+		|| mkdir --parents "$d" \
+		|| exit 1
+done
+
+mount   -t overlay overlay         \
+	-o lowerdir="$FUNC_ROOT"   \
+	-o upperdir="$FUNC_COW"    \
+	-o workdir="$FUNC_COW.tmp" \
+	"$FUNC_UNION_ROOT"	   \
+	|| exit 1
+
+return=1
+. ${BASH_SOURCE%/*}/func

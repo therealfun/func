@@ -1,20 +1,19 @@
 #!/bin/bash
 
-[[ -d $FUNC_ROOT ]] || FUNC_ROOT=/var/cache/func-root
-(( $UID == 0 ))     || { echo "ERROR: run as root"; exit 1; }
+if (( $UID == 0 )); then
+	type=chroot-classic
+else
+	[[ $FUNC_PROOT != "" ]]                                        \
+		|| [[ -e /proc/self/ns/mnt && -e /proc/self/ns/user ]] \
+		|| FUNC_PROOT=1
 
-unmount_all() {
-	umount "$FUNC_ROOT/dev" "$FUNC_ROOT/tmp" "$FUNC_ROOT/proc" "$FUNC_ROOT/sys"
-}
+	if [[ $FUNC_PROOT != "" ]]; then
+		type=chroot-proot
+	else
+		type=chroot-namespaces
+	fi
+fi
 
-trap unmount_all EXIT
-trap "exit 1"    INT QUIT TERM
+set -- $type "$@"
 
-set -o errexit
-
-mount --bind /dev        "$FUNC_ROOT/dev"
-mount --bind /tmp        "$FUNC_ROOT/tmp"
-mount --types proc  proc "$FUNC_ROOT/proc"
-mount --types sysfs none "$FUNC_ROOT/sys"
-
-chroot "$FUNC_ROOT" "$@"
+. ${BASH_SOURCE%/*}/func

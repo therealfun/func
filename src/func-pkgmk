@@ -1,0 +1,45 @@
+#!/bin/bash
+
+(( $# < 2 )) && exit 1
+
+typeSRC=$1
+typePKG=$2
+shift 2
+
+mount_not_needed() {
+	[[ $1 =~ ^$PWD && FUNC_ROOT != / ]]
+}
+
+mount_by_type() {
+	local type=$1
+	local host=$2
+	local cont=$3
+
+	case $type in
+		none) ;;
+		auto)
+			mount_not_needed "$host" \
+				|| FUNC_BIND+=" ${host%/}:${cont%/}"
+			;;
+		*)
+			FUNC_BIND+=" $type:$cont"
+	esac
+}
+
+read -r hostSRC hostPKG hostWORK    < <(
+	. /etc/pkgmk.conf
+	printf '%s %s %s\n' "$PKGMK_SOURCE_DIR" "$PKGMK_PACKAGE_DIR" "$PKGMK_WORK_DIR"
+)
+
+read -r contSRC contPKG contWORK < <(
+	. $FUNC_UNION_ROOT/etc/pkgmk.conf
+	printf '%s %s %s\n' "$PKGMK_SOURCE_DIR" "$PKGMK_PACKAGE_DIR" "$PKGMK_WORK_DIR"
+)
+
+# avoid union
+mount_by_type auto       "$hostWORK" "$contWORK"
+
+mount_by_type "$typeSRC" "$hostSRC"  "$contSRC"
+mount_by_type "$typePKG" "$hostPKG"  "$contPKG"
+
+. ${BASH_SOURCE%/*}/func

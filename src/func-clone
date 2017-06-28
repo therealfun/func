@@ -1,10 +1,9 @@
 #!/bin/bash
 
 if (( $UID == 0 )); then
-	type=upgrade-root
+	type=clone-overlayfs
 else
-	printf 'ERROR: unsupported non-root for the time being\n'
-	exit 1
+	type=clone-unionfs
 fi
 
 set -- $type "$@"

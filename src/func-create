@@ -1,99 +1,12 @@
 #!/bin/bash
 
-main() {
-	local chroot_dir=$1
+if (( $UID == 0 )); then
+	type=create-root
+else
+	printf 'ERROR: unsupported non-root for the time being\n'
+	exit 1
+fi
 
-	(( $UID == 0 )) || { printf 'ERROR: run as root\n'; exit 1; }
+set -- $type "$@"
 
-	shopt -s nullglob dotglob
-	local files=( $chroot_dir/* )
-	shopt -u nullglob dotglob
-	(( ${#files[*]} )) && { printf 'ERROR: %s already exists\n' "$chroot_dir"; exit 1; }
-
-	local m
-	for m in $(get_https_mirrors); do
-		valid_mirror "$m"                               \
-			&& build_from_mirror "$chroot_dir" "$m" \
-			&& exit 0
-	done
-}
-
-get_https_mirrors() {
-	wget                                                      \
-		--quiet                                           \
-		--timeout=30                                      \
-		--output-document=- https://crux.nu/Main/Download \
-	| perl -ne "
-		print(\$1,\"\n\") if m,href=['\"](.+?)['\"].+?>HTTP<,i;
-	" \
-	| sed -e 's,^http:,https:,' -e 's,^ftp:,https:,' \
-	| shuf
-}
-
-valid_mirror() {
-	local mirror=$1
-	local current_ver=$(crux | awk '{print $3; exit}')
-	local loop_ver=$(
-		wget --quiet --timeout=10 --tries=1 "${mirror}loop/crux/releasenotes.txt" -O- \
-		| head -1 \
-		| awk '{print $5; exit}')
-	[[ $current_ver == $loop_ver ]]
-}
-
-build_from_mirror() {
-	local chroot_dir=$1
-	local     mirror=$2
-
-	local pkg_dir="$chroot_dir.pkg"
-
-	remove_dir      "$pkg_dir" || return 1
-	mkdir --parents "$pkg_dir" || return 1
-
-	wget "${mirror}loop/crux/core/"       \
-		--timeout=10                  \
-		--tries=3                     \
-		--recursive                   \
-		--level 1                     \
-		--no-clobber                  \
-		--no-host-directories         \
-		--no-directories              \
-		"--directory-prefix=$pkg_dir" \
-		--no-hsts                     \
-		--accept '*.pkg.tar.xz'       \
-		|| return 1
-
-	build "$chroot_dir" "$pkg_dir"
-}
-
-remove_dir() {
-	local dir=$1
-
-	[[ -d $dir ]] && {
-		rm --recursive --force "$dir" \
-			|| return 1
-	}
-
-	return 0
-}
-
-build() {
-	local chroot_dir=$1
-	local    pkg_dir=$2
-
-	remove_dir      "$chroot_dir"                || return 1
-	mkdir --parents "$chroot_dir/var/lib/pkg"    || return 1
-	touch           "$chroot_dir/var/lib/pkg/db" || return 1
-
-	local p
-	for p in $pkg_dir/*; do
-		printf 'Installing %s\n' "${p##*/}"
-		pkgadd --root "$chroot_dir" "$p" \
-			|| return 1
-	done
-
-	remove_dir "$pkg_dir"
-
-	return 0
-}
-
-main ${1:-/var/cache/func-root}
+. ${BASH_SOURCE%/*}/func

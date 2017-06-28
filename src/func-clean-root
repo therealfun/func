@@ -1,0 +1,40 @@
+#!/bin/bash
+
+main() {
+	if   [[ $1 == ""   ]]; then
+		exit 1
+	elif [[ $1 == auto ]]; then
+		FUNC_ROOT=${FUNC_ROOT:-/var/cache/func-root}
+	else
+		FUNC_ROOT=$1
+	fi
+
+	[[ $FUNC_ROOT == / ]] && exit 1 # seppuku not allowed
+
+	func_cmd=${BASH_SOURCE%/*}/func
+
+	export FUNC_ROOT
+	export FUNC_UNION_ROOT=${FUNC_UNION_ROOT:-$FUNC_ROOT}
+	FUNC_DONT_BIND_CWD=not_needed \
+	$func_cmd chroot-classic bash < <(
+		sed 's/^main "$@"$/container_cleanup/' \
+			< $BASH_SOURCE
+	) || exit 1
+
+	# chaining with another func tool
+	shift
+	. $func_cmd
+}
+
+container_cleanup() {
+	set -o errexit
+	set -o xtrace
+	. /etc/pkgmk.conf
+	test -z "$PKGMK_SOURCE_DIR"  || rm $PKGMK_SOURCE_DIR/*  || true
+	test -z "$PKGMK_PACKAGE_DIR" || rm $PKGMK_PACKAGE_DIR/* || true
+	rm -r /root
+	mkdir /root
+	[[ ! -d /var/cache/ccache ]] || rm -r /var/cache/ccache/* || true
+}
+
+main "$@"

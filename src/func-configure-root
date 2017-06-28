@@ -1,0 +1,127 @@
+#!/bin/bash
+
+main() {
+	if   [[ $1 == ""   ]]; then
+		exit 1
+	elif [[ $1 == auto ]]; then
+		FUNC_ROOT=${FUNC_ROOT:-/var/cache/func-root}
+	else
+		FUNC_ROOT=$1
+	fi
+
+	[[ $FUNC_ROOT == / ]] && exit 1 # seppuku not allowed
+
+	cp --archive --verbose     \
+		/etc/resolv.conf   \
+		/etc/localtime     \
+		"$FUNC_ROOT/etc/"
+
+	[[ -e "$FUNC_ROOT/defaults.pkgmk" ]] || {
+		cat <<-EOF
+		PKGMK_SOURCE_DIR  /var/ports/src
+		PKGMK_PACKAGE_DIR /var/ports/pkg
+		PKGMK_WORK_DIR    /var/ports/work
+		PKGMK_COMPRESSION_MODE xz
+		EOF
+	} > "$FUNC_ROOT/defaults.pkgmk"
+
+	func_cmd=${BASH_SOURCE%/*}/func
+
+	export FUNC_ROOT
+	export FUNC_UNION_ROOT=${FUNC_UNION_ROOT:-$FUNC_ROOT}
+
+	FUNC_DONT_BIND_CWD=not_needed \
+	$func_cmd chroot-classic bash < <(
+		sed 's/^main "$@"$/container_config/' \
+			< $BASH_SOURCE
+	) || exit 1
+
+	FUNC_DONT_BIND_CWD=not_needed \
+	$func_cmd chroot-classic rejmerge \
+		|| exit 1
+
+	# chaining with another func tool
+	shift
+	. $func_cmd
+}
+
+container_config() {
+	set -o errexit
+	set -o xtrace
+
+	sed -e '/PS1/d' -e '/PS2/d' --in-place /etc/profile
+	(
+		printf 'export PS1="%s"\n' ": \w ; "
+		printf 'export PS2="%s"\n' " "
+		grep LANG= /etc/profile >/dev/null \
+			|| echo 'export LANG=en_US.UTF-8'
+	) >> /etc/profile
+
+	while read -r name value; do
+		! egrep "^\\s*$name=" /etc/pkgmk.conf >/dev/null \
+			|| continue
+		[[ $name =~ _DIR$ && ! -d $value ]] \
+			&& mkdir --parents "$value"
+		echo "$name=$value" >> /etc/pkgmk.conf
+	done < /defaults.pkgmk
+
+	# setup language to avoid some warnings/errors
+	localedef --inputfile=en_US --charmap=UTF-8 en_US.UTF-8
+
+	# therealfun repo
+	cat >/etc/ports/therealfun.httpup <<-EOF
+	ROOT_DIR=/usr/ports/therealfun
+	URL=https://raw.githubusercontent.com/therealfun/crux-ports/master/
+	EOF
+	cat >/etc/ports/therealfun.pub <<-EOF
+	untrusted comment: therealfun public key
+	RWTcI5d5qAlZ8u0wrrc4B6AbKFmqJgZWHnYQq+6HxIoFsKc5S0EJkJMm
+	EOF
+	egrep 'therealfun' /etc/prt-get.conf \
+		|| echo prtdir /usr/ports/therealfun >>/etc/prt-get.conf
+
+	# enable inactive ports
+	for repo in /etc/ports/*.{rsync,git,httpup}.inactive; do
+		[[ -e $repo ]] || continue
+		mv $repo ${repo%.inactive}
+		name=${repo##*/}
+		echo prtdir /usr/ports/${name%%.*} >>/etc/prt-get.conf
+	done
+
+	# update ports
+	ports --update || true
+
+	# Set 'runscripts' to NO unless is already configured.
+	# It flags that we have run the post-install scripts.
+	egrep '^\s*runscripts' /etc/prt-get.conf || (
+		prt-get listinst \
+			| xargs --max-args=1 prt-get path \
+			| xargs --max-args=1 --replace=pk \
+				sh -c 'test -f pk/post-install && sh -x pk/post-install' \
+			|| true
+		echo 'runscripts no' >> /etc/prt-get.conf
+	)
+
+	egrep '^\s*makecommand' /etc/prt-get.conf || (
+		echo 'makecommand nice --adjustment=19 ionice --class idle pkgmk' \
+			>> /etc/prt-get.conf
+	)
+
+	# upgrade pkgutils first
+	prt-get update pkgutils --install-scripts
+
+	# hard to live without these
+	prt-get depinst fakeroot prt-utils ccache oprt --install-scripts
+
+	# setup ccache to the safest (slower) mode,
+	# unless is already configured
+	grep CCACHE_DIR /etc/profile || (
+		mkdir --parents /var/cache/ccache
+		echo 'export CCACHE_DIR=/var/cache/ccache'
+		echo 'export CCACHE_COMPILERCHECK="string:$(gcc -dumpversion; crux)"'
+		echo 'export CCACHE_NODIRECT=1'
+		echo 'export PATH="/usr/lib/ccache:$PATH"'
+	) >> /etc/profile
+}
+
+main "$@"
