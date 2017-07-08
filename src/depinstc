@@ -341,11 +341,10 @@ remove_dependent_packages() {
 check_port() {
 	local _PORT=$1
 
-	# pkgmk --update-footprint
-
 	$inject bash <<-EOF
 	set -o errexit
 	set -o xtrace
+	pkgmk --update-footprint
 	revdep "$_PORT"
 	prtverify .
 	finddeps "$_PORT"
