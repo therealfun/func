@@ -111,7 +111,7 @@ container_config() {
 	prt-get update pkgutils --install-scripts
 
 	# hard to live without these
-	prt-get depinst fakeroot prt-utils ccache oprt --install-scripts
+	prt-get depinst fakeroot prt-utils ccache oprt pkgmk.conf --install-scripts
 
 	# setup ccache to the safest (slower) mode,
 	# unless is already configured
