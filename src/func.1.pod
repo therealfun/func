@@ -139,7 +139,7 @@ Currently, it calls B<upgrade-root>.
 
 =item B<clean-root> dir|auto (B<root user>)
 
-Removes the sources and the packages from pkgmk directory, and recreate the F</root> directory, as it might have F<.ccache> or other directories.
+Removes the sources, the packages and the work dirs from pkgmk directories, and recreate the F</root> directory, as it might have F<.ccache> or other directories.
 
 The F</var/cache/func-root> will be used if B<auto> is given as an argument.
 

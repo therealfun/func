@@ -32,6 +32,7 @@ container_cleanup() {
 	. /etc/pkgmk.conf
 	test -z "$PKGMK_SOURCE_DIR"  || rm $PKGMK_SOURCE_DIR/*  || true
 	test -z "$PKGMK_PACKAGE_DIR" || rm $PKGMK_PACKAGE_DIR/* || true
+	test -z "$PKGMK_WORK_DIR"    || rm $PKGMK_WORK_DIR/*    || true
 	rm -r /root
 	mkdir /root
 	[[ ! -d /var/cache/ccache ]] || rm -r /var/cache/ccache/* || true
