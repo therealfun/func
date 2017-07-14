@@ -1,22 +1,21 @@
 #!/bin/bash
 
 main() {
-	_USE_OPRT=0
+	local _USE_OPRT=0
 	[[ "$(which oprt 2>/dev/null)" == "" ]] || _USE_OPRT=1 
 
 	[[ -d $SHARED_SRC ]] || SHARED_SRC=auto
 
-	_FUNC=${BASH_SOURCE%/*}/func
+	local _FUNC=${BASH_SOURCE%/*}/func
 
 	fill_ARGS_with_port_dirs "$@"
 
-	# Because recursive_install runs in a sub-shell,
-	# all these variables will be cleared for every _PORT_DIR
-	declare -A _PORTS_SEEN
- 	_PKG_NO=0
-	for _PORT_DIR in "${_ARGS[@]}"; do
-		( recursive_install "$_PORT_DIR" ) \
-			|| fatal_error "port failed: $_PORT_DIR"
+	declare -A _PORTS_BUILD
+ 	local _PKG_NO=0
+	for _ARG in "${_ARGS[@]}"; do
+		declare -A _PORTS_SEEN
+		recursive_build "$_ARG" \
+			|| fatal_error "port failed: $_ARG"
 	done
 }
 
@@ -59,7 +58,7 @@ get_port_dir() {
 	printf '%s\n' "$(readlink -f "$_PORT_DIR")"
 }
 
-recursive_install() {
+recursive_build() {
 	local _PORT_DIR=$1
 
 	local _CONTINUE=0
@@ -73,11 +72,16 @@ recursive_install() {
 	for _NEXT in "${_DEPS[@]}"; do
 		_NEXT_DIR="$(get_port_dir "$_NEXT")"
 
-		recursive_install "$_NEXT_DIR" \
+		recursive_build "$_NEXT_DIR" \
 			|| return $_STOP
 	done
 
-	install_port "$_PORT_DIR"
+	[[ ${_PORTS_BUILD["$_PORT_DIR"]+defined} ]] \
+		&& return $_CONTINUE
+
+	_PKG_NO=$(( $_PKG_NO + 1 ))
+
+	( build_port "$_PORT_DIR" ) && _PORTS_BUILD["$_PORT_DIR"]=1
 }
 
 already_seen() {
@@ -107,16 +111,14 @@ pkgfile_deps() {
 	fi
 }
 
-install_port() {
+build_port() {
 	local _PORT_DIR=$1
 	local     _PORT=${_PORT_DIR##*/}
 
 	local _CONTINUE=0
 	local     _STOP=1
 
-	_PKG_NO=$(( $_PKG_NO + 1 ))
-
-	printf '======= %s (%s) [%d] @ %(%F %T)T\n' "$_PORT_DIR" "${_PORT}" "$_PKG_NO" -1
+	printf '======= %s (%s) [%d] @ %(%F %T)T\n' "$_PORT_DIR" "${_ARG##*/}" "$_PKG_NO" -1
 
 	cd -- "$_PORT_DIR" \
 		|| return $_STOP
@@ -141,9 +143,9 @@ install_port() {
 	inject="$_FUNC clone auto auto ports pkgmk $SHARED_SRC $SHARED_PKG oprt prt-get ccache chroot"
 
 	is_port_up_to_date || {
-		install_port_in_container "$_PORT_DIR" || {
+		build_port_in_container "$_PORT_DIR" || {
 			FUNC_PROOT=1
-			install_port_in_container "$_PORT_DIR"
+			build_port_in_container "$_PORT_DIR"
 		} || return $_STOP
 
 		[[ -e "$FUNC_COW/is_our_arg" ]] && {
@@ -223,7 +225,7 @@ make_pkg_signature() {
 	}
 }
 
-install_port_in_container() {
+build_port_in_container() {
 	local _PORT_DIR=$1
 	local     _PORT=${_PORT_DIR##*/}
 
