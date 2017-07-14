@@ -143,9 +143,9 @@ build_port() {
 	inject="$_FUNC clone auto auto ports pkgmk $SHARED_SRC $SHARED_PKG oprt prt-get ccache chroot"
 
 	is_port_up_to_date || {
-		build_port_in_container "$_PORT_DIR" || {
+		install_port_in_container "$_PORT_DIR" || {
 			FUNC_PROOT=1
-			build_port_in_container "$_PORT_DIR"
+			install_port_in_container "$_PORT_DIR"
 		} || return $_STOP
 
 		[[ -e "$FUNC_COW/is_our_arg" ]] && {
