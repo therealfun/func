@@ -1,11 +1,5 @@
 #!/bin/bash
 
-(( $# < 2 )) && exit 1
-
-typeSRC=$1
-typePKG=$2
-shift 2
-
 mount_not_needed() {
 	[[ $1 =~ ^$PWD && FUNC_ROOT != / ]]
 }
@@ -18,28 +12,48 @@ mount_by_type() {
 	case $type in
 		none) ;;
 		auto)
+			[[ -n $host && -n $cont ]] || exit 1
 			mount_not_needed "$host" \
 				|| FUNC_BIND+=" ${host%/}:${cont%/}"
 			;;
 		*)
+			[[ -n $cont ]] || exit 1
 			FUNC_BIND+=" $type:$cont"
 	esac
 }
 
-read -r hostSRC hostPKG hostWORK    < <(
+show_config() {
+(
 	. /etc/pkgmk.conf
 	printf '%s %s %s\n' "$PKGMK_SOURCE_DIR" "$PKGMK_PACKAGE_DIR" "$PKGMK_WORK_DIR"
 )
+}
 
-read -r contSRC contPKG contWORK < <(
-	. $FUNC_UNION_ROOT/etc/pkgmk.conf
-	printf '%s %s %s\n' "$PKGMK_SOURCE_DIR" "$PKGMK_PACKAGE_DIR" "$PKGMK_WORK_DIR"
-)
+main() {
+	(( $# < 2 )) && exit 1
 
-# avoid union
-mount_by_type auto       "$hostWORK" "$contWORK"
+	local typeSRC=$1
+	local typePKG=$2
+	shift 2
 
-mount_by_type "$typeSRC" "$hostSRC"  "$contSRC"
-mount_by_type "$typePKG" "$hostPKG"  "$contPKG"
+	local hostSRC hostPKG hostWORK
+	read -r hostSRC hostPKG hostWORK < <( show_config )
 
-. ${BASH_SOURCE%/*}/func
+	local contSRC contPKG contWORK
+	read -r contSRC contPKG contWORK < <(
+		${BASH_SOURCE%/*}/func chroot bash < <(
+			sed 's/^main "$@"$/show_config/' \
+				< $BASH_SOURCE
+		)
+	)
+
+	# avoid union
+	mount_by_type auto       "$hostWORK" "$contWORK"
+
+	mount_by_type "$typeSRC" "$hostSRC"  "$contSRC"
+	mount_by_type "$typePKG" "$hostPKG"  "$contPKG"
+
+	. ${BASH_SOURCE%/*}/func
+}
+
+main "$@"
