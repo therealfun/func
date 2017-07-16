@@ -323,7 +323,7 @@ remove_dependent_packages() {
 
 	local _DEPENDENTS _PKG _DEP
 
-	readarray -t $_DEPENDENTS < "$FUNC_COW/rebuild_for_dependents"
+	readarray -t _DEPENDENTS < "$FUNC_COW/rebuild_for_dependents"
 
 	for _DEP in "${_DEPENDENTS[@]}"; do
 		for _PKG in $SHARED_PKG/$_DEP\#*; do
