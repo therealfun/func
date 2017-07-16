@@ -297,8 +297,7 @@ container_select_build_CMD() {
 		export OPRT_DONT_ASK_SCRIPT=we_dont_run_scripts
 		export OPRT_DONT_LOG=do_not_pollute_the_log_if_mounted
 		_CMD=oprt-depinst
-		container_is_port_installed "$_PORT"        \
-			&& [[ -e /rebuild_for_dependents ]] \
+		container_is_port_installed "$_PORT" \
 			&& _CMD=oprt-reinstall
 		[[ -e /is_our_arg ]] && {
 			export OPRT_INSTALL_WITH_FORCE=do_not_care
