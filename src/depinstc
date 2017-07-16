@@ -280,9 +280,8 @@ container_make_dependent_list() {
 
 	if [[ -x "$(which oprt 2>/dev/null)" ]]; then
 		export OPRT_DEPSEARCH_BASIC=only_installed_ports_depending_on_this
-		oprt-depsearch "$_PORT" 2>/dev/null    \
-				| grep '^Name:'        \
-				| awk '{print $2}'     \
+		oprt-depsearch "$_PORT" 2>/dev/null              \
+				| awk '$1 == "Name:" {print $2}' \
 				| sort -u
 	else
 		prt-get dependent --all "$_PORT"
