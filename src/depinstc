@@ -150,8 +150,10 @@ build_port() {
 
 		[[ -e "$FUNC_COW/is_our_arg" ]] && {
 			make_port_signature # with the new footprint
-			check_port "$_PORT" \
-				|| return $_STOP
+			check_port "$_PORT" || {
+				printf 'WARNING: %s has issues\n' "$_PORT"
+				return $_STOP
+			}
 		}
 	}
 
@@ -348,7 +350,8 @@ check_port() {
 	revdep "$_PORT"
 	prtverify .
 	finddeps "$_PORT"
-	findredundantdeps "$_PORT" || true
+	(findredundantdeps "$_PORT" || true) | tee /redundant
+	[[ ! -s /redundant ]]
 	EOF
 }
 
