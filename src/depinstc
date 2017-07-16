@@ -225,7 +225,7 @@ make_pkg_signature() {
 	}
 }
 
-build_port_in_container() {
+install_port_in_container() {
 	local _PORT_DIR=$1
 	local     _PORT=${_PORT_DIR##*/}
 
