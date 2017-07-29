@@ -118,7 +118,6 @@ container_config() {
 	grep CCACHE_DIR /etc/profile || (
 		mkdir --parents /var/cache/ccache
 		echo 'export CCACHE_DIR=/var/cache/ccache'
-		echo 'export CCACHE_COMPILERCHECK="string:$(gcc -dumpversion; crux)"'
 		echo 'export CCACHE_NODIRECT=1'
 		echo 'export PATH="/usr/lib/ccache:$PATH"'
 	) >> /etc/profile
