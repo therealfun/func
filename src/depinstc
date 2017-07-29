@@ -213,7 +213,7 @@ make_pkg_signature() {
 	is_port_up_to_date || return
 
 	local _TARGET="$SHARED_PKG/${BASH_REMATCH[1]##*/}"
-	local    _SIG="${_TARGET%.*}.sig"
+	local    _SIG="${_TARGET}.sig"
 
 	[[ -e $_TARGET && -e $_SIG && $_SIG -nt $_TARGET ]] && return
 
