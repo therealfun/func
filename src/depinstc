@@ -10,12 +10,17 @@ main() {
 
 	fill_ARGS_with_port_dirs "$@"
 
-	declare -A _PORTS_BUILD
- 	local _PKG_NO=0
-	for _ARG in "${_ARGS[@]}"; do
-		declare -A _PORTS_SEEN
-		recursive_build "$_ARG" \
-			|| fatal_error "port failed: $_ARG"
+	local _TO_BUILD=()
+	echo "Making the build list"
+	readarray -t _TO_BUILD < <( print_build_order )
+	echo "We have ${#_TO_BUILD[@]} packages to build"
+
+	local _PORT_DIR
+ 	local _PKG_NO=1
+	for _PORT_DIR in "${_TO_BUILD[@]}"; do
+		( build_port "$_PORT_DIR" ) \
+			|| fatal_error "port failed: $_PORT_DIR"
+		_PKG_NO=$(( $_PKG_NO + 1 ))
 	done
 }
 
@@ -26,17 +31,11 @@ fatal_error() {
 
 fill_ARGS_with_port_dirs() {
 	local _A
+	local _PORT_DIR
 
 	for _A in ${@:-$PWD}; do
-		_A=$(readlink -f "$_A")
-
-		is_port_dir "$_A" || {
-			_A="$(get_port_dir "${_A##*/}")"
-			is_port_dir "$_A" \
-				|| fatal_error "Can't find port: $_A"
-		}
-			
-		_ARGS+=( $_A )
+		get_port_dir "$(readlink -f "$_A")"			
+		_ARGS+=( $_PORT_DIR )
 	done
 }
 
@@ -45,57 +44,52 @@ is_port_dir() {
 }
 
 get_port_dir() {
-	local     _NAME=$1
-	local _PORT_DIR
+	local _NAME=$1
 
-	if (( $_USE_OPRT == 1 )); then
-		local _COLS=( $(oprt-collections "$_NAME") )
-		_PORT_DIR="${_COLS[0]}/$_NAME"
+	if is_port_dir "$_NAME"; then
+		_PORT_DIR=$_NAME
 	else
-		_PORT_DIR="$(prt-get path "$_NAME")"
+		if (( $_USE_OPRT == 1 )); then
+			local _COLS=( $(oprt-collections "$_NAME") )
+			_PORT_DIR="${_COLS[0]}/$_NAME"
+		else
+			_PORT_DIR="$(prt-get path "$_NAME")"
+		fi
+		is_port_dir "$_PORT_DIR" \
+			|| fatal_error "Can't find port: $_NAME"
 	fi
 
-	printf '%s\n' "$(readlink -f "$_PORT_DIR")"
+	_PORT_DIR="$(readlink -f "$_PORT_DIR")"
 }
 
-recursive_build() {
+print_build_order() {
+	declare -A _DEPENDS
+	declare -A _DIRS
+	local _ARG
+	for _ARG in "${_ARGS[@]}"; do
+		print_deptree "$_ARG" 1
+	done	                       \
+	| sort_based_on_level_and_path \
+	| print_uniques
+}
+
+print_deptree() {
 	local _PORT_DIR=$1
+	local    _LEVEL=$2
 
-	local _CONTINUE=0
-	local     _STOP=1
+	[[ ${_DEPENDS["$_PORT_DIR"]+defined} ]] \
+		|| _DEPENDS["$_PORT_DIR"]="$(pkgfile_deps "$_PORT_DIR")"
 
-	already_seen "${_PORT_DIR##*/}" \
-		&& return $_CONTINUE
+	printf '%*s%s\n' $(( $_LEVEL * 2 )) "" "$_PORT_DIR"
 
-	local _NEXT _NEXT_DIR _DEPS=( $(pkgfile_deps "$_PORT_DIR") )
-
-	for _NEXT in "${_DEPS[@]}"; do
-		_NEXT_DIR="$(get_port_dir "$_NEXT")"
-
-		recursive_build "$_NEXT_DIR" \
-			|| return $_STOP
+	local _DEP
+	for _DEP in ${_DEPENDS["$_PORT_DIR"]}; do
+		[[ ${_DIRS["$_DEP"]+defined} ]] || {
+			get_port_dir "$_DEP"
+			_DIRS["$_DEP"]=$_PORT_DIR
+		}
+		print_deptree "${_DIRS["$_DEP"]}" $(( $_LEVEL + 1 ))
 	done
-
-	[[ ${_PORTS_BUILD["$_PORT_DIR"]+defined} ]] \
-		&& return $_CONTINUE
-
-	_PKG_NO=$(( $_PKG_NO + 1 ))
-
-	( build_port "$_PORT_DIR" ) && _PORTS_BUILD["$_PORT_DIR"]=1
-}
-
-already_seen() {
-	local     _PORT=$1
-
-	local     _SEEN=0
-	local _NOT_SEEN=1
-
-	[[ ${_PORTS_SEEN["$_PORT"]+defined} ]] \
-		&& return $_SEEN
-
-	_PORTS_SEEN["$_PORT"]=1
-
-	return $_NOT_SEEN
 }
 
 pkgfile_deps() {
@@ -109,6 +103,21 @@ pkgfile_deps() {
 			< "$_PORT_DIR/Pkgfile"   \
 		| sed -e 's/,/ /g' -e 's/  / /g'
 	fi
+}
+
+sort_based_on_level_and_path() {
+	sed 's/  /0 /g'         \
+		| sort          \
+		| sed 's/0 //g'
+}
+
+print_uniques() {
+	awk '{
+		if ( ! seen[$1] ) {
+			print $1
+			seen[$1]=1
+		}
+	}'
 }
 
 build_port() {
