@@ -118,7 +118,7 @@ build_port() {
 	local _CONTINUE=0
 	local     _STOP=1
 
-	printf '======= %s (%s) [%d] @ %(%F %T)T\n' "$_PORT_DIR" "${_ARG##*/}" "$_PKG_NO" -1
+	printf '======= %s [%d] @ %(%F %T)T\n' "$_PORT_DIR" "$_PKG_NO"
 
 	cd -- "$_PORT_DIR" \
 		|| return $_STOP
@@ -239,7 +239,7 @@ install_port_in_container() {
 			< $BASH_SOURCE
 	) || return $?
 
-	remove_dependent_packages "$_PORT"
+	remove_dependent_packages
 
 	return 0
 }
@@ -323,8 +323,6 @@ container_is_port_installed() {
 }
 
 remove_dependent_packages() {
-	local _PORT=$1
-
 	[[ -e "$FUNC_COW/rebuild_for_dependents" ]] || return
 
 	local _DEPENDENTS _PKG _DEP
@@ -335,7 +333,7 @@ remove_dependent_packages() {
 		for _PKG in $SHARED_PKG/$_DEP\#*; do
 			[[ -e "$_PKG" ]] || continue
 
-			printf 'REMOVING %s because of %s\n' "$_PKG" "$_PORT"
+			printf 'DELETE %s\n' "$_PKG"
 
 			rm -- "$_PKG"
 		done
