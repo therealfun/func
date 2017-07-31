@@ -17,13 +17,15 @@ main() {
 		"$FUNC_ROOT/etc/"
 
 	[[ -e "$FUNC_ROOT/defaults.pkgmk" ]] || {
-		cat <<-EOF
+		cat > "$FUNC_ROOT/defaults.pkgmk" <<-EOF
 		PKGMK_SOURCE_DIR  /var/ports/src
 		PKGMK_PACKAGE_DIR /var/ports/pkg
 		PKGMK_WORK_DIR    /var/ports/work
-		PKGMK_COMPRESSION_MODE xz
 		EOF
-	} > "$FUNC_ROOT/defaults.pkgmk"
+		PKGMK_COMPRESSION_MODE=$(. /etc/pkgmk.conf; echo $PKGMK_COMPRESSION_MODE)
+		[[ $PKGMK_COMPRESSION_MODE != "" ]] \
+			&& echo "PKGMK_COMPRESSION_MODE $PKGMK_COMPRESSION_MODE" >> "$FUNC_ROOT/defaults.pkgmk"
+	} 
 
 	func_cmd=${BASH_SOURCE%/*}/func
 
