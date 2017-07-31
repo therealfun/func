@@ -13,7 +13,7 @@ add_mount() {
 }
 
 # unshare is for convenience, to avoid explicit umount commands
-unshare="unshare --fork"
+unshare="unshare --mount --fork"
 [[ -e /proc/self/ns/pid ]] && unshare+=" --pid"
 [[ -e /proc/self/ns/uts ]] && {
 	unshare+=" --uts"
