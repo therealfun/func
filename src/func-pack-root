@@ -15,7 +15,8 @@ echo "Building $FUNC_ROOT.tar.xz ..."
 bsdtar  --strip-components 1       \
 	--create                   \
 	--file "$FUNC_ROOT.tar.xz" \
-	"$FUNC_ROOT"
+	-H "$FUNC_ROOT"
+# -H is used in case FUNC_ROOT is a symlink
 
 if (( $? == 0 )); then
 	echo "Done"
