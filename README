@@ -19,6 +19,7 @@ See func(1) or [src/func.1.pod] for more info.
 
 # TODO
 
+  - document: src,pkg,work dirs has to be on the same partition as the cloned root (if symlinks and namespaces are used)
   - non-root user alternatives for: create, configure, upgrade, clean, pack (maybe using fakeroot -i load-file -s save-file, or with a proot archive)
   - chroot-fakechroot
   - chroot-container
