@@ -311,6 +311,7 @@ container_select_build_CMD() {
 		export OPRT_DONT_ASK_SCRIPT=we_dont_run_scripts
 		export OPRT_DONT_LOG=do_not_pollute_the_log_if_mounted
 		export OPRT_DONT_DELAY_SCRIPT=not_on_real_system
+		export OPRT_DONT_UPDATE_COLLECTION_STATS=stats_do_not_match_the_real_root
 		_CMD=oprt-depinst
 		container_is_port_installed "$_PORT" \
 			&& _CMD=oprt-reinstall
