@@ -12,6 +12,8 @@ add_mount() {
 	priv_cmd+="mount --rbind '$src' '$dest'; "
 }
 
+FUNC_UNION_ROOT=${FUNC_UNION_ROOT:-/var/cache/func-root}
+
 # unshare is for convenience, to avoid explicit umount commands
 unshare="unshare --mount --fork"
 [[ -e /proc/self/ns/pid ]] && unshare+=" --pid"
