@@ -153,8 +153,11 @@ build_port() {
 
 	is_port_up_to_date || {
 		install_port_in_container "$_PORT_DIR" || {
-			FUNC_PROOT=1
-			install_port_in_container "$_PORT_DIR"
+			[[ $FUNC_PROOT ]] || {
+				FUNC_PROOT=1
+				install_port_in_container "$_PORT_DIR"
+				unset FUNC_PROOT
+			}
 		} || return $_STOP
 
 		[[ -e "$FUNC_COW/is_our_arg" ]] && {
