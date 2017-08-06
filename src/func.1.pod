@@ -2,7 +2,7 @@
 
 =head1 NAME
 
-func - fun tools to run port commands in temporary containers
+func - fun tools to build ports in temporary containers
 
 =head1 SYNOPSIS
 
