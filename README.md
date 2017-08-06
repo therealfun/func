@@ -15,7 +15,7 @@ Tools to build ports in containers:
   - oprt - mount oprt settings directory in a container
   - prt-get - adapt /etc/prt-get.conf in a container
 
-See func(1) or [src/func.1.pod] for more info.
+See func(1) or [func.1.pod](src/func.1.pod) for more info.
 
 # System builds/upgrades
 
