@@ -33,8 +33,8 @@ container_cleanup() {
 	test -z "$PKGMK_SOURCE_DIR"  || rm    "${PKGMK_SOURCE_DIR%/}"/*  || true
 	test -z "$PKGMK_PACKAGE_DIR" || rm    "${PKGMK_PACKAGE_DIR%/}"/* || true
 	test -z "$PKGMK_WORK_DIR"    || rm -r "${PKGMK_WORK_DIR%/}"/*    || true
-	rm -r /root
-	mkdir /root
+	rm -r /root;      mkdir /root
+	rm -r /usr/ports; mkdir /usr/ports
 	[[ ! -d /var/cache/ccache ]] || rm -r /var/cache/ccache/* || true
 }
 
