@@ -109,7 +109,10 @@ container_config() {
 			>> /etc/prt-get.conf
 	)
 
-	# upgrade pkgutils first
+	# upgrade ports (because of the public keys)
+	prt-get update ports --install-scripts
+
+	# upgrade pkgutils
 	prt-get update pkgutils --install-scripts
 
 	# hard to live without these
