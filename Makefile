@@ -23,7 +23,7 @@ $(DEST_BIN)/%:  src/%   ; install -Dm755 $< $@
 $(DEST_MAN1)/%: build/% ; install -Dm644 $< $@
 
 build/%.1: src/%.1.pod
-	$(POD_CMD) --name=`echo $* | tr '[:lower:]' '[:upper:]'` --section=1 $< $@
+	$(POD_CMD) --name=`echo $* | tr '[a-z]' '[A-Z]'` --section=1 $< $@
 
 $(DEST_BIN_FILES):  $(DEST_BIN)
 $(DEST_MAN1_FILES): $(DEST_MAN1) build
