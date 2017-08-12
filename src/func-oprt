@@ -1,7 +1,9 @@
 #!/bin/bash
 
 [[ -d "$HOME/.cache/oprt" ]] && {
-	FUNC_BIND+=" $HOME/.cache/oprt:/home/u/.cache/oprt"
+	FUNC_BIND+=" $HOME/.cache/oprt"
+	[[ $FUNC_ROOT == / ]] \
+		|| FUNC_BIND+=":/home/u/.cache/oprt"
 }
 
 . ${BASH_SOURCE%/*}/func
