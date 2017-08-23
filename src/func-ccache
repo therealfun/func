@@ -1,12 +1,17 @@
 #!/bin/bash
 
-[[ $CCACHE_DIR != "" && -x "$FUNC_ROOT/usr/bin/ccache" ]] && {
-	read -r there < <(
-		. $FUNC_ROOT/etc/profile
-		printf '%s\n' "$CCACHE_DIR"
-	)
-	[[ $there != "" ]] \
-		&& FUNC_BIND+=" $CCACHE_DIR:$there"
-}
+if [[ $FUNC_ROOT == / ]]; then
+	[[ $CCACHE_DIR != "" ]] \
+		&& FUNC_BIND+=" $CCACHE_DIR"
+else
+	[[ $CCACHE_DIR != "" && -x "$FUNC_ROOT/usr/bin/ccache" ]] && {
+		read -r there < <(
+			. $FUNC_ROOT/etc/profile
+			printf '%s\n' "$CCACHE_DIR"
+		)
+		[[ $there != "" ]] \
+			&& FUNC_BIND+=" $CCACHE_DIR:$there"
+	}
+fi
 
 . ${BASH_SOURCE%/*}/func
