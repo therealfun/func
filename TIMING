@@ -1,0 +1,61 @@
+CPU: N2840
+HDD:
+    hdparm -t /dev/sda 100.35 MB/sec
+    hdparm -t /dev/sdb  29.42 MB/sec
+PORT: synergy-cli (cmake)
+
+(*)   Major (requiring I/O) page faults (see /usr/bin/time -v)
+(**)  ccache/nodirect == CCACHE_NODIRECT=1
+
+running on /
+============
+
+mode                                   time  ccache hits   CPU 
+---------------------------------------------------------------
+default                                2'58"               100%
+-j2                                    1'49"               177%
+work=/tmpfs                            2'56"
+work=/tmpfs -j2                        1'28"               177%
+work=/tmpfs -j2 ccache/nodirect        0'26" (100% hits)   128% (ccache sdb)
+work=/tmpfs -j2 ccache/nodirect=/tmpfs 0'26" (100% hits)   128% (ccache sdb)
+work=/tmpfs -j2 ccache/direct=/tmpfs   0'24" (100% hits)   128% (ccache sdb)
+-j2 ccache/direct                      0'13" (100% hits)   108% (ccache sda)
+fakeroot -j2 ccache/direct             0'15" (100% hits)   105% (ccache sda)
+
+unionfs-fuse
+============
+
+mode                                   time  ccache hits   CPU    (*)
+---------------------------------------------------------------------
+default                                3'26"                90%  100k
+ccache/nodirect                        1'00" (100% hits)    67%   85k
+ccache/nodirect -j2                    0'47" (100% hits)    87%   81k
+ccache/direct -j2                      0'30" (100% hits)    68%   55k
+ccache/direct=/tmpfs -j2               0'30" (100% hits)    70%   55k
+ccache/direct=/tmpfs -j2 work=/tmpfs   0'29" (100% hits)    70%   55k
+
+unionfs-fuse + proot (PROOT_NO_SECCOMP=1)
+=========================================
+
+mode                                   time  ccache hits   CPU    (*)
+---------------------------------------------------------------------
+default                                4'47"                70%  100k
+ccache/nodirect                        2'35" (100% hits)    37%   90k
+ccache/nodirect -j2                    2'11" (100% hits)    44%   89k
+ccache/direct -j2                      1'04" (100% hits)    45%   59k
+ccache/direct                          1'10" (100% hits)    40%   60k
+ccache/direct -j4                      1'02" (100% hits)    46%   59k
+ccache/direct -j8                      1'01" (100% hits)    47%   59k
+
+overlayfs (root user)
+=====================
+
+mode                                   time  ccache hits   CPU 
+---------------------------------------------------------------
+default                                2'55"               100%
+ccache/nodirect                        3'12" (  0% hits)   100%
+ccache/nodirect                        0'31" (100% hits)    96%
+ccache/nodirect -j2                    0'23" (100% hits)   133%
+ccache/direct -j2                      0'14" (100% hits)   106%
+ccache/direct -j4                      0'14" (100% hits)   104%
+ccache/direct                          0'16" (100% hits)    94%
