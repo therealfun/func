@@ -266,19 +266,9 @@ container_build_port() {
 	local _CMD
 	container_select_build_CMD "$_PORT"
 
-	local ccache=$(which ccache 2>/dev/null)
-	[[ $ccache == "" ]] && ccache=":"
-
-	$ccache --zero-stats
-
 	printf '%s\n' "$_CMD"
 
-	$_CMD \
-		|| exit 1
-
-	$ccache --show-stats | grep "cache hit rate"
-
-	exit 0
+	$_CMD
 }
 
 container_disable_install_scripts() {
