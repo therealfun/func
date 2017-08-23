@@ -35,7 +35,7 @@ container_cleanup() {
 	test -z "$PKGMK_WORK_DIR"    || rm -r "${PKGMK_WORK_DIR%/}"/*    || true
 	rm -r /root;      mkdir /root
 	rm -r /usr/ports; mkdir /usr/ports
-	[[ ! -d /var/cache/ccache ]] || rm -r /var/cache/ccache/* || true
+	[[ ! -d $CCACHE_DIR ]] || rm -r $CCACHE_DIR/* || true
 }
 
 main "$@"
