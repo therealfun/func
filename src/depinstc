@@ -309,6 +309,7 @@ container_select_build_CMD() {
 			&& _CMD=oprt-reinstall
 		[[ -e /is_our_arg ]] && {
 			export OPRT_INSTALL_WITH_FORCE=do_not_care
+			export OPRT_INSTALL_IGNORING_CHECKSUMS=do_not_care
 			export OPRT_INSTALL_IGNORING_FOOTPRINT=not_footprinted_yet
 		}
 	else
