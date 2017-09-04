@@ -140,7 +140,7 @@ build_port() {
 	# Also, the signature file has to be created before the build
 	# to avoid .md5sum creation (when it is not supported for this repo)
 	[[ -e "$FUNC_COW/is_our_arg" && -e $SEC_KEY ]] \
-		&& touch .signature
+		&& make_port_signature # with the old footprint
 
 	[[ -d $SHARED_PKG ]] \
 		|| SHARED_PKG=$(. /etc/pkgmk.conf; echo "$PKGMK_PACKAGE_DIR")
