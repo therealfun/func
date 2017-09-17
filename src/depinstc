@@ -66,6 +66,12 @@ print_build_order() {
 	declare -A _DEPENDS
 	declare -A _DIRS
 	local _ARG
+
+	# setting the collections from command line
+	for _ARG in "${_ARGS[@]}"; do
+		_DIRS[${_ARG##*/}]=$_ARG
+	done
+
 	for _ARG in "${_ARGS[@]}"; do
 		print_deptree "$_ARG" 1
 	done	                       \
@@ -198,8 +204,9 @@ create_file_in_container() {
 }
 
 is_our_arg() {
-	local _RE=" $1 "
-	[[ " ${_ARGS[@]} " =~ $_RE ]]
+	local _RE="/${1##*/} "
+
+	[[ "${_ARGS[@]} " =~ $_RE ]]
 }
 
 is_port_up_to_date() {
