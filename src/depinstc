@@ -166,6 +166,10 @@ build_port() {
 		} || return $_STOP
 
 		[[ -e "$FUNC_COW/is_our_arg" ]] && {
+			update_footprint || {
+				printf 'ERROR: footprint update failed for %s\n' "$_PORT"
+				return $_STOP
+			}
 			make_port_signature # with the new footprint
 			check_port "$_PORT" || {
 				printf 'WARNING: %s has issues\n' "$_PORT"
@@ -352,13 +356,20 @@ remove_dependent_packages() {
 	return 0
 }
 
+update_footprint() {
+	$inject bash <<-EOF
+	set -o errexit
+	set -o xtrace
+	pkgmk --update-footprint
+	EOF
+}
+
 check_port() {
 	local _PORT=$1
 
 	$inject bash <<-EOF
 	set -o errexit
 	set -o xtrace
-	pkgmk --update-footprint
 	revdep "$_PORT"
 	prtverify .
 	finddeps "$_PORT"
