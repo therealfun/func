@@ -18,9 +18,9 @@ main() {
 
 	[[ -e "$FUNC_ROOT/defaults.pkgmk" ]] || {
 		cat > "$FUNC_ROOT/defaults.pkgmk" <<-EOF
-		PKGMK_SOURCE_DIR  /var/ports/src
-		PKGMK_PACKAGE_DIR /var/ports/pkg
-		PKGMK_WORK_DIR    /var/ports/work
+			PKGMK_SOURCE_DIR  /var/ports/src
+			PKGMK_PACKAGE_DIR /var/ports/pkg
+			PKGMK_WORK_DIR    /var/ports/work/\$name
 		EOF
 		PKGMK_COMPRESSION_MODE=$(. /etc/pkgmk.conf; echo $PKGMK_COMPRESSION_MODE)
 		[[ $PKGMK_COMPRESSION_MODE != "" ]] \
