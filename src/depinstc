@@ -145,7 +145,7 @@ build_port() {
 	# Eg. on a mounted fuse directory, like encfs.
 	# Also, the signature file has to be created before the build
 	# to avoid .md5sum creation (when it is not supported for this repo)
-	[[ -e "$FUNC_COW/is_our_arg" && -e $SEC_KEY ]] \
+	[[ -e "$FUNC_COW/is_our_arg" ]] \
 		&& make_port_signature # with the old footprint
 
 	[[ -d $SHARED_PKG ]] \
