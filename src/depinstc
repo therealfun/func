@@ -357,6 +357,8 @@ remove_dependent_packages() {
 }
 
 update_footprint() {
+	[[ -e $SEC_KEY ]] || return 0
+
 	$inject bash <<-EOF
 	set -o errexit
 	set -o xtrace
