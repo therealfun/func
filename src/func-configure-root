@@ -101,7 +101,7 @@ container_config() {
 			| xargs --max-args=1 --replace=pk \
 				sh -c 'test -f pk/post-install && sh -x pk/post-install' \
 			|| true
-		echo 'runscripts no' >> /etc/prt-get.conf
+		echo 'runscripts yes' >> /etc/prt-get.conf
 	)
 
 	egrep '^\s*makecommand' /etc/prt-get.conf || (
