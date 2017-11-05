@@ -375,10 +375,10 @@ check_port() {
 	set -o errexit
 	set -o xtrace
 	revdep "$_PORT"
-	prtverify .
+	prtverify . | tee >(grep -E '^(FATAL|ERROR)' > /verify)
 	finddeps "$_PORT"
 	(findredundantdeps "$_PORT" || true) | tee /redundant
-	[[ ! -s /redundant ]]
+	[[ ! -s /redundant && ! -s /verify ]]
 	EOF
 }
 
