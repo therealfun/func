@@ -269,9 +269,6 @@ install_port_in_container() {
 container_build_port() {
 	local _PORT=$1
 
-	[[ -e /full_root ]] \
-		&& container_disable_install_scripts
-
 	container_make_dependent_list "$_PORT"
 
 	local _CMD
@@ -280,14 +277,6 @@ container_build_port() {
 	printf '%s\n' "$_CMD"
 
 	$_CMD
-}
-
-container_disable_install_scripts() {
-	export OPRT_DONT_RUN_SCRIPTS=lilo_fails_installing_kernel
-	ed -s /etc/prt-get.conf <<-EOF
-		g/runscripts/d
-		w
-	EOF
 }
 
 container_make_dependent_list() {
@@ -310,11 +299,16 @@ container_select_build_CMD() {
 
 	if [[ -x "$(which oprt 2>/dev/null)" ]]; then
 		export OPRT_BUILD_WITH_FAKEROOT=needed_by_some_ports
-		export OPRT_DONT_RUN_SCRIPTS=lilo_fails_installing_kernel
-		export OPRT_DONT_ASK_SCRIPT=we_dont_run_scripts
 		export OPRT_DONT_LOG=do_not_pollute_the_log_if_mounted
-		export OPRT_DONT_DELAY_SCRIPT=not_on_real_system
+		export OPRT_DONT_ASK_SCRIPT=ignore_delayed_questions
 		export OPRT_DONT_UPDATE_COLLECTION_STATS=stats_do_not_match_the_real_root
+		if [[ -e /full_root ]]; then
+			# running against the real root means
+			# we already have the new users in place (on upgrades)
+			export OPRT_DONT_RUN_SCRIPTS=lilo_fails_installing_kernel
+		else
+			export OPRT_DO_RUN_SCRIPTS=to_create_the_new_users
+		fi
 		_CMD=oprt-depinst
 		container_is_port_installed "$_PORT" \
 			&& _CMD=oprt-reinstall
@@ -327,6 +321,14 @@ container_select_build_CMD() {
 		                           _CMD="prt-get depinst $_PORT"
 		prt-get isinst "$_PORT" && _CMD="prt-get update  $_PORT"
 		[[ -e /is_our_arg ]]    && _CMD+=" -if -fi"
+		if [[ -e /full_root ]]; then
+			_CMD+=" --install-scripts"
+		else
+			ed -s /etc/prt-get.conf <<-EOF
+				g/runscripts/d
+				w
+			EOF
+		fi
 	fi
 }
 
