@@ -46,7 +46,7 @@ mkdir --parents "$FUNC_UNION_ROOT" \
 	|| mkdir --parents "$FUNC_COW" \
 	|| exit 1
 
-unionfs -o cow,relaxed_permissions       \
+unionfs -o cow,relaxed_permissions,max_files=2048       \
 	"${FUNC_COW}=RW:${FUNC_ROOT}=RO" \
 	"$FUNC_UNION_ROOT"               \
 		|| exit 1
