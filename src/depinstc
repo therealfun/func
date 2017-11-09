@@ -278,6 +278,8 @@ container_build_port() {
 
 	printf '%s\n' "$_CMD"
 
+	export SHELL=/bin//bash # help firefox find its shell
+
 	$_CMD
 }
 
