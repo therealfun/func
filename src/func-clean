@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if (( $UID == 0 )); then
+if (( UID == 0 )); then
 	type=clean-root
 else
 	printf 'ERROR: unsupported non-root for the time being\n'
@@ -9,4 +9,4 @@ fi
 
 set -- $type "$@"
 
-. ${BASH_SOURCE%/*}/func
+. "${BASH_SOURCE%/*}/func"

@@ -5,9 +5,9 @@
 # Use the tool from the current directory, then search the $PATH
 # It might make sense to reverse this order to allow customizations.
 
-tool=${BASH_SOURCE%/*}/func-$1
+tool="${BASH_SOURCE%/*}/func-$1"
 
-[[ -x $tool ]] || tool=$(which func-$1 2>/dev/null)
+[[ -x $tool ]] || tool=$(which "func-$1" 2>/dev/null)
 
 export                       \
 	FUNC_BIND            \
@@ -22,7 +22,8 @@ export                       \
 [[ $tool == "" ]] \
 	|| shift
 
-[[ $return == "" ]] \
-	&& exec $tool "$@"
+prefix="exec"
+[[ ${dont_exec:?} ]] && prefix=
 
-$tool "$@"
+$prefix "$tool" "$@"
+

@@ -22,7 +22,7 @@ main() {
 	# chaining with another func tool
 	[[ -e "${BASH_SOURCE%/*}/func" ]] && {
 		shift
-		. ${BASH_SOURCE%/*}/func
+		. "${BASH_SOURCE%/*}/func"
 	}
 }
 
@@ -30,7 +30,7 @@ check_empty() {
 	local chroot_dir=$1
 
 	shopt -s nullglob dotglob
-	local files=( $chroot_dir/* )
+	local files=( "$chroot_dir"/* )
 	shopt -u nullglob dotglob
 	(( ${#files[*]} == 0 ))
 }
@@ -55,7 +55,7 @@ get_https_mirrors() {
 		--timeout=30                                      \
 		--output-document=- https://crux.nu/Main/Download \
 	| perl -ne "
-		print(\$1,\"\n\") if m,href=['\"](.+?)['\"].+?>HTTP<,i;
+		print(\$1,\"\\n\") if m,href=['\"](.+?)['\"].+?>HTTP<,i;
 	" \
 	| sed -e 's,^http:,https:,' -e 's,^ftp:,https:,' \
 	| shuf
@@ -63,12 +63,13 @@ get_https_mirrors() {
 
 valid_mirror() {
 	local mirror=$1
-	local current_ver=$(crux | awk '{print $3; exit}')
-	local loop_ver=$(
+	local current_ver loop_ver
+	current_ver=$(crux | awk '{print $3; exit}')
+	loop_ver=$(
 		wget --quiet --timeout=10 --tries=1 "${mirror}loop/crux/releasenotes.txt" -O- \
 		| head -1 \
 		| awk '{print $5; exit}')
-	[[ $current_ver == $loop_ver ]]
+	[[ $current_ver == "$loop_ver" ]]
 }
 
 build_from_mirror() {

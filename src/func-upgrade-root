@@ -18,12 +18,12 @@ main() {
 	FUNC_DONT_BIND_CWD=not_needed \
 	$func_cmd chroot-classic bash < <(
 		sed 's/^main "$@"$/container_upgrade/' \
-			< $BASH_SOURCE
+			< "${BASH_SOURCE[0]}"
 	) || exit 1
 
 	# chaining with another func tool
 	shift
-	. $func_cmd
+	. "$func_cmd"
 }
 
 container_upgrade() {

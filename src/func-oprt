@@ -6,4 +6,4 @@
 		|| FUNC_BIND+=":/home/u/.cache/oprt"
 }
 
-. ${BASH_SOURCE%/*}/func
+. "${BASH_SOURCE%/*}/func"

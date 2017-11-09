@@ -31,7 +31,7 @@ cleanup_union() {
 	local err=$?
 	umount "$FUNC_UNION_ROOT"
 	rmdir   "$FUNC_UNION_ROOT"
-	[[ $FUNC_COW == $auto_FUNC_COW ]] \
+	[[ $FUNC_COW == "$auto_FUNC_COW" ]] \
 		&& rm --recursive --force "$FUNC_COW"
 	rm --recursive --force "$FUNC_COW.tmp"
 	exit $err
@@ -53,5 +53,5 @@ mount   -t overlay overlay         \
 	"$FUNC_UNION_ROOT"	   \
 	|| exit 1
 
-return=1
-. ${BASH_SOURCE%/*}/func
+dont_exec=1
+. "${BASH_SOURCE%/*}/func"

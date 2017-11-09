@@ -1,6 +1,6 @@
 #!/bin/bash
 
-if (( $UID == 0 )); then
+if (( UID == 0 )); then
 	type=clone-overlayfs
 else
 	type=clone-unionfs
@@ -8,4 +8,4 @@ fi
 
 set -- $type "$@"
 
-. ${BASH_SOURCE%/*}/func
+. "${BASH_SOURCE%/*}/func"

@@ -19,7 +19,7 @@ sed "s/sudo/fakeroot/g" < "$src_conf" > "$dest_conf"
 
 [[ $FUNC_ROOT != / ]] && {
 	ed -s "$dest_conf" <<-EOF
-		g/${HOME//\//\\/}/s/${HOME//\//\\/}/\/home\/u/
+		g/${HOME//\//\\/}/s/${HOME//\//\\/}/\\/home\\/u/
 		w
 	EOF
 	# avoid funddeps and findredundantdeps errors
@@ -27,4 +27,4 @@ sed "s/sudo/fakeroot/g" < "$src_conf" > "$dest_conf"
 	FUNC_BIND_RO+=" $HOME/.cache/pp"
 }
 
-. ${BASH_SOURCE%/*}/func
+. "${BASH_SOURCE%/*}/func"

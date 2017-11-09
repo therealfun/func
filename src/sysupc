@@ -2,7 +2,7 @@
 
 run_me_in_container() {
 	export FUNC_DONT_BIND_CWD=not_needed
-	exec ${BASH_SOURCE%/*}/func      \
+	exec "${BASH_SOURCE%/*}/func"    \
 		clone        /    auto   \
 		pkgmk        auto auto   \
 		ccache                   \
@@ -11,7 +11,7 @@ run_me_in_container() {
 		chroot                   \
 		bash < <(
 			sed 's/^run_me_in_container$/run_me/' \
-				< $BASH_SOURCE
+				< "${BASH_SOURCE[0]}"
 		)
 }
 
@@ -55,9 +55,11 @@ sysupc_with_prt_get() {
 	set -o xtrace
 	prt-get sysup || exit 1
 
-	[[ ${REVDEP_OPTS+defined} ]] \
-		|| REVDEP_OPTS="-i libreoffice"
-	REVDEP_OPTS="${REVDEP_OPTS//[^a-zA-Z0-9 -]/}"
+	if [[ ${REVDEP_OPTS:?} ]]; then
+		REVDEP_OPTS="${REVDEP_OPTS//[^a-zA-Z0-9 -]/}"
+	else
+		REVDEP_OPTS="-i libreoffice"
+	fi
 
 	revdep $REVDEP_OPTS | xargs --no-run-if-empty prt-get update -fr
 }

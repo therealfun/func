@@ -17,8 +17,9 @@ bsdtar  --strip-components 1       \
 	--file "$FUNC_ROOT.tar.xz" \
 	-H "$FUNC_ROOT"
 # -H is used in case FUNC_ROOT is a symlink
+rc=$?
 
-if (( $? == 0 )); then
+if (( rc == 0 )); then
 	echo "Done"
 else
 	echo "Failed"

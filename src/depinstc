@@ -20,12 +20,12 @@ main() {
 	for _PORT_DIR in "${_TO_BUILD[@]}"; do
 		( build_port "$_PORT_DIR" ) \
 			|| fatal_error "port failed: $_PORT_DIR"
-		_PKG_NO=$(( $_PKG_NO + 1 ))
+		_PKG_NO=$(( _PKG_NO + 1 ))
 	done
 }
 
 fatal_error() {
-	printf "ERROR: %s\n" "$*" >&2
+	printf 'ERROR: %s\n' "$*" >&2
 	exit 1
 }
 
@@ -33,9 +33,9 @@ fill_ARGS_with_port_dirs() {
 	local _A
 	local _PORT_DIR
 
-	for _A in ${@:-$PWD}; do
+	for _A in "${@:-$PWD}"; do
 		get_port_dir "$(readlink -f "$_A")"			
-		_ARGS+=( $_PORT_DIR )
+		_ARGS+=( "$_PORT_DIR" )
 	done
 }
 
@@ -49,8 +49,9 @@ get_port_dir() {
 	if is_port_dir "$_NAME"; then
 		_PORT_DIR=$_NAME
 	else
-		if (( $_USE_OPRT == 1 )); then
-			local _COLS=( $(oprt-collections "$_NAME") )
+		if (( _USE_OPRT == 1 )); then
+			declare -a _COLS
+			mapfile -t _COLS < <( oprt-collections "$_NAME" )
 			_PORT_DIR="${_COLS[0]}/$_NAME"
 		else
 			_PORT_DIR="$(prt-get path "$_NAME")"
@@ -86,7 +87,7 @@ print_deptree() {
 	[[ ${_DEPENDS["$_PORT_DIR"]+defined} ]] \
 		|| _DEPENDS["$_PORT_DIR"]="$(pkgfile_deps "$_PORT_DIR")"
 
-	printf '%*s%s\n' $(( $_LEVEL * 2 )) "" "$_PORT_DIR"
+	printf '%*s%s\n' $(( _LEVEL * 2 )) "" "$_PORT_DIR"
 
 	local _DEP
 	for _DEP in ${_DEPENDS["$_PORT_DIR"]}; do
@@ -94,14 +95,14 @@ print_deptree() {
 			get_port_dir "$_DEP"
 			_DIRS["$_DEP"]=$_PORT_DIR
 		}
-		print_deptree "${_DIRS["$_DEP"]}" $(( $_LEVEL + 1 ))
+		print_deptree "${_DIRS["$_DEP"]}" $(( _LEVEL + 1 ))
 	done
 }
 
 pkgfile_deps() {
 	local _PORT_DIR=$1
 
-	if (( $_USE_OPRT == 1 )); then
+	if (( _USE_OPRT == 1 )); then
 		oprt-pkgfile-deps "$_PORT_DIR"
 	else
 		awk '(NF > 1) { print $2 }'      \
@@ -133,7 +134,7 @@ build_port() {
 	local _CONTINUE=0
 	local     _STOP=1
 
-	printf '======= %s [%d] @ %(%F %T)T\n' "$_PORT_DIR" "$_PKG_NO"
+	printf '======= %s [%d] @ %(%F %T)T\n' "$_PORT_DIR" "$_PKG_NO" -1
 
 	cd -- "$_PORT_DIR" \
 		|| return $_STOP
@@ -210,14 +211,13 @@ create_file_in_container() {
 is_our_arg() {
 	local _RE="/${1##*/} "
 
-	[[ "${_ARGS[@]} " =~ $_RE ]]
+	[[ "${_ARGS[*]} " =~ $_RE ]]
 }
 
 is_port_up_to_date() {
-	local _MATCH="^=======> Package '(.*)' is up to date\.\$"
+	local _MATCH="^=======> Package '(.*)' is up to date.$"
 
-	local _TEXT=$($inject pkgmk --up-to-date)
-	[[ "$_TEXT" =~ $_MATCH ]]
+	[[ "$($inject pkgmk --up-to-date)" =~ $_MATCH ]]
 }
 
 make_port_signature() {
@@ -246,7 +246,9 @@ make_pkg_signature() {
 		| signify -S -e -x - -q -s "$SEC_KEY" -m -              \
 		> "$_TARGET.tmp"
 
-	(( $? == 0 )) && {
+	local rc=$?
+
+	(( rc == 0 )) && {
 		sed "s,${SEC_KEY/.sec/.pub},$PUB_KEY," --in-place "$_TARGET.tmp"
 		mv "$_TARGET.tmp" "$_SIG"
 	}
@@ -258,7 +260,7 @@ install_port_in_container() {
 
 	$inject bash < <(
 		sed "s/^main \"\$@\"\$/container_build_port $_PORT/" \
-			< $BASH_SOURCE
+			< "${BASH_SOURCE[0]}"
 	) || return $?
 
 	remove_dependent_packages

@@ -7,4 +7,4 @@ FUNC_BIND+=" /etc/ports /usr/ports"
 	FUNC_BIND_RO+="                 /home/u/.cache/pp"
 }
 
-. ${BASH_SOURCE%/*}/func
+. "${BASH_SOURCE%/*}/func"

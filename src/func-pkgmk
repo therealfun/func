@@ -1,7 +1,7 @@
 #!/bin/bash
 
 mount_not_needed() {
-	[[ $1 =~ ^$PWD && FUNC_ROOT != / ]]
+	[[ $1 =~ ^$PWD && $FUNC_ROOT != / ]]
 }
 
 mount_by_type() {
@@ -41,9 +41,9 @@ main() {
 
 	local contSRC contPKG contWORK
 	read -r contSRC contPKG contWORK < <(
-		${BASH_SOURCE%/*}/func chroot bash < <(
+		"${BASH_SOURCE%/*}/func" chroot bash < <(
 			sed 's/^main "$@"$/show_config/' \
-				< $BASH_SOURCE
+				< "${BASH_SOURCE[0]}"
 		)
 	)
 
@@ -53,7 +53,7 @@ main() {
 	mount_by_type "$typeSRC" "$hostSRC"  "$contSRC"
 	mount_by_type "$typePKG" "$hostPKG"  "$contPKG"
 
-	. ${BASH_SOURCE%/*}/func
+	. "${BASH_SOURCE%/*}/func"
 }
 
 main "$@"
