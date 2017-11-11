@@ -23,7 +23,7 @@ export                       \
 	|| shift
 
 prefix="exec"
-[[ ${dont_exec:?} ]] && prefix=
+[[ ${dont_exec+defined} ]] && prefix=
 
 $prefix "$tool" "$@"
 

@@ -38,7 +38,7 @@ sysupc_with_oprt() {
 	export OPRT_DONT_ASK_SCRIPT=we_dont_run_scripts
 
 	# avoid rebuilding some big packages
-	[[ ${REVDEP_OPTS+defines} ]] \
+	[[ ${REVDEP_OPTS+defined} ]] \
 		&& export OPRT_REVDEP=$REVDEP_OPTS
 
 	set -o xtrace
@@ -55,7 +55,7 @@ sysupc_with_prt_get() {
 	set -o xtrace
 	prt-get sysup || exit 1
 
-	if [[ ${REVDEP_OPTS:?} ]]; then
+	if [[ ${REVDEP_OPTS+defined} ]]; then
 		REVDEP_OPTS="${REVDEP_OPTS//[^a-zA-Z0-9 -]/}"
 	else
 		REVDEP_OPTS="-i libreoffice"
